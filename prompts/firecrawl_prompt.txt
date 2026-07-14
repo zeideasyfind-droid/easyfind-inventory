@@ -1,1 +1,29 @@
-<PASTE FINAL PROMPT HERE>
+You are extracting structured rental property inventory from a Housing.com (or similar real-estate portal) listing page.
+
+Read the page content and return ONLY a JSON object (no markdown, no commentary) with exactly these fields:
+
+- title: the listing headline/title (string)
+- rent: monthly rent amount, numeric value only, no currency symbols or commas (number)
+- deposit: security deposit amount, numeric value only (number)
+- maintenance: monthly maintenance charge, numeric value only (number)
+- bhk: number of bedrooms (e.g. 2 for "2 BHK") (number)
+- bathrooms: number of bathrooms (number)
+- balcony: number of balconies (number)
+- furnishing: one of "Unfurnished", "Semi-Furnished", "Furnished"
+- area: built-up/carpet area in square feet, numeric value only (number)
+- floor: floor description, e.g. "3 out of 10" (string)
+- property_type: e.g. "Apartment", "Independent House", "Villa" (string)
+- parking: parking availability/details, e.g. "1 Covered" (string)
+- tenant_preference: e.g. "Family", "Bachelors", "Anyone" (string)
+- pets: pet policy, e.g. "Allowed", "Not Allowed" (string)
+- available_from: date the property is available from, in "YYYY-MM-DD" format if possible, otherwise "Immediate" (string)
+- owner_name: name of the owner or contact person (string)
+- contact_number: phone number of the owner/contact (string)
+- address: full property address (string)
+- locality: locality/neighbourhood name (string)
+- latitude: latitude coordinate if present on the page (number)
+- longitude: longitude coordinate if present on the page (number)
+- amenities: list of amenities mentioned (array of strings)
+- description: the listing description text (string)
+
+If a field cannot be found on the page, set its value to null. Do not invent values. Return JSON only.

@@ -1,0 +1,638 @@
+
+
+# Implementation Document
+
+
+
+**Project:** EasyFind Inventory Engine
+
+**Objective:** Build the first production version of the inventory ingestion system. Do not redesign the architecture. Complete the existing repository.
+
+
+
+---
+
+
+
+## Existing Repository Structure (DO NOT CHANGE)
+
+
+
+```text
+
+easyfind-inventory/
+
+
+
+frontend/
+
+backend/
+
+prompts/
+
+Dockerfile
+
+cloudbuild.yaml
+
+requirements.txt
+
+.env.example
+
+README.md
+
+```
+
+
+
+Do not rename or reorganize folders.
+
+
+
+---
+
+
+
+## Objective
+
+
+
+Build a production-ready web application where a broker pastes a property listing URL and receives structured inventory saved into Google Sheets.
+
+
+
+---
+
+
+
+## User Flow
+
+
+
+1. User opens the webpage.
+
+2. Pastes a Housing.com property URL.
+
+3. Clicks **Extract Property**.
+
+4. Backend calls Firecrawl.
+
+5. Firecrawl extracts the webpage.
+
+6. LLM converts raw HTML into structured JSON.
+
+7. Normalize data.
+
+8. Check duplicates.
+
+9. Save JSON archive.
+
+10. Append inventory to Google Sheets.
+
+11. Return success message.
+
+
+
+---
+
+
+
+## Frontend
+
+
+
+Implement:
+
+
+
+* URL textbox
+
+* Extract button
+
+* Loading state
+
+* Success screen
+
+* Error screen
+
+
+
+Use vanilla HTML/CSS/JS.
+
+
+
+---
+
+
+
+## Backend
+
+
+
+Use:
+
+
+
+* FastAPI
+
+* Uvicorn
+
+
+
+Expose:
+
+
+
+```
+
+GET /
+
+GET /health
+
+POST /extract
+
+```
+
+
+
+Cloud Run must listen on
+
+
+
+```
+
+PORT=8080
+
+```
+
+
+
+---
+
+
+
+## Firecrawl Service
+
+
+
+Implement:
+
+
+
+```
+
+backend/services/firecrawl.py
+
+```
+
+
+
+Responsibilities:
+
+
+
+* Accept listing URL
+
+* Call Firecrawl API
+
+* Return markdown/raw content
+
+
+
+API key via environment variable.
+
+
+
+---
+
+
+
+## Prompt
+
+
+
+Use:
+
+
+
+```
+
+prompts/firecrawl_prompt.txt
+
+```
+
+
+
+Prompt should extract:
+
+
+
+* Title
+
+* Rent
+
+* Deposit
+
+* Maintenance
+
+* BHK
+
+* Bathrooms
+
+* Balcony
+
+* Furnishing
+
+* Area
+
+* Floor
+
+* Property Type
+
+* Parking
+
+* Tenant Preference
+
+* Pets
+
+* Available From
+
+* Owner Name
+
+* Contact Number
+
+* Address
+
+* Locality
+
+* Latitude
+
+* Longitude
+
+* Amenities
+
+* Description
+
+
+
+Return JSON only.
+
+
+
+---
+
+
+
+## Normalizer
+
+
+
+Implement:
+
+
+
+```
+
+backend/services/normalizer.py
+
+```
+
+
+
+Responsibilities:
+
+
+
+Normalize:
+
+
+
+* Rent
+
+* Deposit
+
+* Maintenance
+
+* Furnishing values
+
+* BHK
+
+* Bathrooms
+
+* Balcony
+
+* Area
+
+* Dates
+
+* Null handling
+
+
+
+---
+
+
+
+## Duplicate Checker
+
+
+
+Implement:
+
+
+
+```
+
+backend/services/duplicate_checker.py
+
+```
+
+
+
+Duplicate rules:
+
+
+
+Priority:
+
+
+
+1. Listing URL
+
+2. Contact Number
+
+3. Property Address
+
+4. Combination of Rent + Area + BHK
+
+
+
+---
+
+
+
+## Google Sheets
+
+
+
+Implement:
+
+
+
+```
+
+backend/services/google_sheets.py
+
+```
+
+
+
+Append one row.
+
+
+
+Use Google Service Account.
+
+
+
+Spreadsheet ID from `.env`.
+
+
+
+---
+
+
+
+## JSON Archive
+
+
+
+Every extraction must be archived before writing to Google Sheets.
+
+
+
+Store JSON under:
+
+
+
+```
+
+archives/YYYY/MM/DD/
+
+```
+
+
+
+Filename:
+
+
+
+```
+
+property_<timestamp>.json
+
+```
+
+
+
+Use Google Drive (preferred) or local storage initially.
+
+
+
+Implement in:
+
+
+
+```
+
+backend/services/google_drive.py
+
+```
+
+
+
+---
+
+
+
+## API
+
+
+
+### POST
+
+
+
+```
+
+/extract
+
+```
+
+
+
+Input
+
+
+
+```json
+
+{
+
+  "url":"https://..."
+
+}
+
+```
+
+
+
+Output
+
+
+
+```json
+
+{
+
+  "status":"success",
+
+  "property_id":"PID12345",
+
+  "sheet_row":128
+
+}
+
+```
+
+
+
+---
+
+
+
+### GET
+
+
+
+```
+
+/health
+
+```
+
+
+
+Return
+
+
+
+```json
+
+{
+
+    "status":"ok"
+
+}
+
+```
+
+
+
+---
+
+
+
+## Configuration
+
+
+
+Use environment variables only.
+
+
+
+```
+
+FIRECRAWL_API_KEY
+
+GOOGLE_SHEET_ID
+
+GOOGLE_SERVICE_ACCOUNT_JSON
+
+GOOGLE_DRIVE_FOLDER_ID
+
+```
+
+
+
+Never hardcode secrets.
+
+
+
+---
+
+
+
+## Docker
+
+
+
+Container must:
+
+
+
+* expose port 8080
+
+* run
+
+
+
+```
+
+uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8080}
+
+```
+
+
+
+Cloud Run deployment must succeed.
+
+
+
+---
+
+
+
+## Acceptance Criteria
+
+
+
+The implementation is complete only if:
+
+
+
+* Cloud Run deploys successfully.
+
+* `/health` returns HTTP 200.
+
+* Frontend loads from Cloud Run.
+
+* User can paste a Housing.com URL.
+
+* Firecrawl extracts data.
+
+* Prompt generates structured JSON.
+
+* JSON is normalized.
+
+* Duplicate check executes.
+
+* JSON archive is saved.
+
+* Google Sheets receives a new row.
+
+* Success response is shown to the user.
+
+* All configuration is via environment variables.
+
+* No placeholder implementations remain.
+

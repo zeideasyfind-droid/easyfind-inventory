@@ -1,2 +1,6 @@
 fastapi
-uvicorn
+uvicorn[standard]
+httpx
+google-api-python-client
+google-auth
+python-multipart

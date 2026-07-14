@@ -1,1 +1,55 @@
-<!doctype html><html><body><h1>EasyFind Inventory Engine</h1></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EasyFind Inventory Engine</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="card">
+    <h1>EasyFind Inventory Engine</h1>
+    <p class="subtitle">Paste a Housing.com listing URL to extract and save it to inventory.</p>
+
+    <form id="extract-form">
+      <label for="url">Property listing URL</label>
+      <input
+        id="url"
+        name="url"
+        type="url"
+        placeholder="https://housing.com/..."
+        required
+      />
+      <button id="extract-btn" type="submit">Extract Property</button>
+    </form>
+
+    <div id="loading" class="state hidden">
+      <div class="spinner"></div>
+      <p>Extracting property details&hellip;</p>
+    </div>
+
+    <div id="success" class="state hidden">
+      <p class="success-icon">&#10003;</p>
+      <h2>Saved to inventory</h2>
+      <p id="success-details"></p>
+      <button type="button" id="reset-success">Extract another</button>
+    </div>
+
+    <div id="duplicate" class="state hidden">
+      <p class="warning-icon">&#9888;</p>
+      <h2>Already in inventory</h2>
+      <p id="duplicate-details"></p>
+      <button type="button" id="reset-duplicate">Try another URL</button>
+    </div>
+
+    <div id="error" class="state hidden">
+      <p class="error-icon">&#10007;</p>
+      <h2>Extraction failed</h2>
+      <p id="error-details"></p>
+      <button type="button" id="reset-error">Try again</button>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
