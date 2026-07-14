@@ -4,7 +4,7 @@ from backend.models.property import ExtractRequest
 from backend.services import duplicate_checker, firecrawl, google_drive, google_sheets
 from backend.services.firecrawl import FirecrawlError
 from backend.services.google_sheets import GoogleSheetsError
-from backend.services.normalizer import normalize_property
+from backend.services.normalizer import detect_portal, normalize_property
 from backend.utils import generate_property_id, utc_now_iso
 
 router = APIRouter()
@@ -25,6 +25,7 @@ async def extract(payload: ExtractRequest):
     # 2. Normalize the extracted fields into the exact sheet column values.
     normalized = normalize_property(raw)
     normalized["url"] = url
+    normalized["portal"] = detect_portal(url)
     normalized["property_id"] = generate_property_id()
     normalized["extracted_at"] = utc_now_iso()
 
