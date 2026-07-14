@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from backend.models.property import ExtractRequest
-from backend.services import contact_extractor, duplicate_checker, firecrawl, google_drive, google_sheets
+from backend.services import duplicate_checker, firecrawl, google_drive, google_sheets
 from backend.services.firecrawl import FirecrawlError
 from backend.services.google_sheets import GoogleSheetsError
 from backend.services.normalizer import normalize_property
@@ -30,25 +30,14 @@ async def extract(payload: ExtractRequest):
     raw = scrape_result["fields"]
 
     # 2. Normalize the extracted fields into the exact sheet column values.
+    # If contact_number comes back masked or missing, it's left blank here
+    # (normalize_property -> _clean_str) rather than chased down elsewhere
+    # on the page -- that's filled in manually, not scraped for.
     normalized = normalize_property(raw)
     normalized["url"] = url
     normalized["portal"] = detect_portal(url)
     normalized["property_id"] = generate_property_id()
     normalized["extracted_at"] = utc_now_iso()
-
-    # 2b. Contact number rescue: the schema-based extraction alone can
-    # miss or mask a contact number that's fully visible elsewhere on the
-    # page. Re-search the raw extraction plus markdown/html/rawHtml for a
-    # complete, unmasked Indian mobile number. Never infers/reconstructs
-    # partial numbers -- if nothing valid is found anywhere, the contact
-    # field is left empty rather than guessed.
-    normalized["contact_number"] = contact_extractor.find_indian_mobile(
-        raw.get("contact_number"),
-        normalized.get("contact_number"),
-        scrape_result.get("markdown"),
-        scrape_result.get("html"),
-        scrape_result.get("rawHtml"),
-    )
 
     # 3. Check whether this listing already has a row (by URL, else by
     # Contact Number + Society Name + Rent) so we upsert instead of

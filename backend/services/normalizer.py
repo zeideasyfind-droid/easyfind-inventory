@@ -262,7 +262,11 @@ def normalize_property(raw: dict, today=None) -> dict:
 
     return {
         "date": today.isoformat(),
-        "onboarding_status": "Done WFP",
+        # Column B is manually maintained by brokers ("Done", "Done WFP",
+        # "Not Available", ...). The automation must never populate it --
+        # not even with a default -- leave it blank so a new row still
+        # shows blank in Column B until a human sets it.
+        "onboarding_status": None,
         "property_location": _clean_str(raw.get("property_location")),
         "society_name": _clean_str(raw.get("society_name")),
         "owner_name": _clean_str(raw.get("owner_name")),
