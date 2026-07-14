@@ -1,0 +1,395 @@
+
+
+# EasyFind Inventory Engine – Production Bug Fixes
+
+
+
+Work directly on the connected GitHub repository.
+
+
+
+Do **not** create a new repository, clone into another workspace, or use temporary directories.
+
+
+
+Before making changes:
+
+
+
+-. Identify the repository root.
+
+- Make only the requested changes.
+
+-Test locally (or in your execution environment).
+
+-. Commit.
+
+-Push the branch.
+
+-Open a Pull Request (preferred). If a PR is not supported and I have explicitly configured direct pushes for this repository, push directly to the target branch.
+
+
+
+Do **not** modify anything outside the requested scope.
+
+
+
+---
+
+
+
+## Existing functionality (must remain unchanged)
+
+
+
+Do **not** modify:
+
+
+
+* Firecrawl extraction prompt
+
+* JSON schema
+
+* Normalization logic
+
+* Google Sheets column mapping
+
+* Duplicate detection
+
+* Backend architecture
+
+* API routes
+
+* Dockerfile
+
+* Cloud Build
+
+* Cloud Run configuration
+
+* Environment variables
+
+
+
+---
+
+
+
+# Task 1 — Multi-portal UI
+
+
+
+Update only the homepage text.
+
+
+
+Replace the Housing.com-specific wording with wording that supports:
+
+
+
+* MyGate
+
+* 99acres
+
+* MagicBricks
+
+* CommonFloor
+
+* NoBroker
+
+* Makaan
+
+* Housing.com
+
+
+
+Update the placeholder to:
+
+
+
+```
+
+Paste a property URL...
+
+```
+
+
+
+No other UI changes.
+
+
+
+---
+
+
+
+# Task 2 — Improve contact extraction
+
+
+
+Improve only the existing contact extraction.
+
+
+
+Do **not** change the JSON schema.
+
+
+
+After Firecrawl returns the extraction, search:
+
+
+
+* markdown
+
+* html
+
+* rawHtml
+
+* descriptions
+
+* broker notes
+
+* owner notes
+
+* footer/header
+
+* any visible extracted text
+
+
+
+If a valid, complete Indian mobile number is found anywhere, populate the existing contact field.
+
+
+
+Never:
+
+
+
+* infer masked numbers
+
+* reconstruct numbers
+
+* implement browser automation
+
+* click "Show Contact"
+
+* implement login
+
+* implement OTP
+
+* bypass portal restrictions
+
+
+
+If no complete number exists, leave the contact field empty.
+
+
+
+---
+
+
+
+# Task 3 — Production Bug
+
+
+
+## Never modify Google Sheet Column B
+
+
+
+This is a production bug.
+
+
+
+Column B (Onboarding Status) is maintained manually.
+
+
+
+Typical values include:
+
+
+
+* Done
+
+* Done WFP
+
+* Not Available
+
+
+
+The inventory engine must never overwrite this column.
+
+
+
+Review the Google Sheets write logic and ensure only the intended columns are written.
+
+
+
+---
+
+
+
+# Task 4 — Preserve the original URL
+
+
+
+Current bug:
+
+
+
+When the user pastes a MyGate short link such as:
+
+
+
+```
+
+https://link.mygate.com/gz2trg
+
+```
+
+
+
+the backend stores an authentication or redirect URL instead of the original URL.
+
+
+
+Always write the **exact URL pasted by the user** into Google Sheets.
+
+
+
+Do not store:
+
+
+
+* redirect URLs
+
+* authentication URLs
+
+* intermediate URLs
+
+* Firecrawl-generated URLs
+
+
+
+The original input URL is the canonical value.
+
+
+
+---
+
+
+
+# Validation
+
+
+
+Run end-to-end validation using these URLs:
+
+
+
+### 99acres
+
+
+
+```
+
+https://www.99acres.com/3-bhk-bedroom-apartment-flat-for-rent-in-ars-signature-homes-kada-agrahara-bangalore-east-1280-sqft-spid-P92416104
+
+```
+
+
+
+### Housing.com
+
+
+
+```
+
+https://housing.com/rent/20577772-1200-sqft-2-bhk-independent-house-on-rent-in-hsr-layout-bengaluru
+
+```
+
+
+
+### MyGate
+
+
+
+```
+
+https://link.mygate.com/gz2trg
+
+```
+
+
+
+### MagicBricks
+
+
+
+```
+
+https://www.magicbricks.com/propertyDetails/2-BHK-1150-Sq-ft-Multistorey-Apartment-FOR-Rent-Electronic-City-in-Bangalore&id=4d423835343736373537
+
+```
+
+
+
+### CommonFloor
+
+
+
+```
+
+https://www.commonfloor.com/listing/semi-furnished-3bhk-apartment-for-rent-in-old-airport-road-bangalore-at-golf-manor-apartment/ynnyrqjokrmpif6s
+
+```
+
+
+
+Verify for each:
+
+
+
+* Extraction succeeds.
+
+* Correct portal is identified.
+
+* Original URL is preserved.
+
+* Contact extraction behaves correctly.
+
+* Masked numbers remain empty.
+
+* Google Sheet row is written correctly.
+
+* Column B is never modified.
+
+* No regression in existing functionality.
+
+
+
+---
+
+
+
+# Deliverables
+
+
+
+Provide:
+
+
+
+1. Files modified.
+
+2. Root cause of each bug.
+
+3. Validation results.
+
+4. Commit hash.
+
+5. Pull Request URL (preferred), or confirmation of the push if working directly on the configured branch.
+
+
+
+If any validation fails, stop before pushing and explain the failure instead of making unrelated changes.
