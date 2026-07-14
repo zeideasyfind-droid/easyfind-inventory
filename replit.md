@@ -83,6 +83,27 @@ Existing repo layout (`frontend/`, `backend/`, `prompts/`, `Dockerfile`,
 `cloudbuild.yaml`, `requirements.txt`) was preserved as-is per the
 implementation spec — no reorganizing.
 
+## Multi-portal support & contact rescue (2026-07-14)
+
+- **Portal detection:** `backend/utils.py::detect_portal(url)` maps a
+  listing URL's domain to its portal name (MyGate, 99acres, MagicBricks,
+  CommonFloor, NoBroker, Makaan, Housing.com); `extract.py` sets column V
+  from this instead of the old hardcoded `"Housing.com"`. Homepage copy
+  (`frontend/index.html`) now mentions all 7 portals with a generic
+  "Paste a property URL..." placeholder.
+- **Contact number rescue:** Firecrawl is now asked for `markdown`,
+  `html`, and `rawHtml` in addition to `json` (the extraction schema
+  itself is unchanged). `backend/services/contact_extractor.py` searches
+  all of them for a complete, unmasked Indian mobile number and uses it
+  if found; masked/partial numbers never match (they contain non-digit
+  placeholder characters) and are never inferred or reconstructed. If
+  nothing valid is found, the contact field is left empty.
+- **Column B / URL preservation:** already correct before this change —
+  `_NEVER_OVERWRITE_ON_UPDATE` in `google_sheets.py` protects
+  `onboarding_status` (column B) on every update, and `extract.py` always
+  writes the exact pasted `url` (never a Firecrawl-resolved/redirect
+  URL) to column W. Verified, not modified.
+
 ## Setup status
 
 Imported project fully set up on 2026-07-14: Python 3.12 + all `requirements.txt`

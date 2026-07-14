@@ -65,7 +65,11 @@ async def extract_property(url: str) -> dict:
 
     payload = {
         "url": url,
-        "formats": ["json"],
+        # "json" drives the schema-based extraction below (unchanged). The
+        # other formats are requested only so contact_extractor can do a
+        # secondary, non-schema text search for a complete contact number
+        # that the LLM extraction may have missed or masked.
+        "formats": ["json", "markdown", "html", "rawHtml"],
         "onlyMainContent": True,
         "jsonOptions": {
             "prompt": prompt,
@@ -94,4 +98,9 @@ async def extract_property(url: str) -> dict:
     if not extracted:
         raise FirecrawlError("Firecrawl response did not include extracted JSON.")
 
-    return extracted
+    return {
+        "fields": extracted,
+        "markdown": data.get("markdown"),
+        "html": data.get("html"),
+        "rawHtml": data.get("rawHtml"),
+    }
