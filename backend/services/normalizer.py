@@ -3,43 +3,15 @@ by the EasyFind Google Sheet column mapping (columns A-W).
 """
 import re
 from datetime import datetime, timezone
-from urllib.parse import urlparse
 
 from backend.utils import extract_number
 
+# Portal detection (from a listing URL's domain) lives in backend/utils.py,
+# used directly by backend/api/extract.py — kept there rather than here so
+# it sits next to the other single-purpose URL/string helpers, with no
+# duplicate implementation in this module.
 
 _NULLISH_STRINGS = {"null", "none", "n/a", "na", "nil", "-"}
-
-# Ordered (substring-of-domain, label) pairs used to identify which portal a
-# pasted URL came from. Checked against the lowercased hostname only (not the
-# full URL) so query strings/paths can't cause a false match.
-_PORTAL_DOMAINS = [
-    ("99acres.com", "99acres"),
-    ("magicbricks.com", "MagicBricks"),
-    ("commonfloor.com", "CommonFloor"),
-    ("nobroker.in", "NoBroker"),
-    ("nobroker.com", "NoBroker"),
-    ("makaan.com", "Makaan"),
-    ("mygate.com", "MyGate"),
-    ("housing.com", "Housing.com"),
-]
-
-
-def detect_portal(url):
-    """Identify the source portal from a listing URL's hostname (handles
-    shortlinks like link.mygate.com the same as the main domain)."""
-    if not url:
-        return None
-    try:
-        host = (urlparse(str(url).strip()).hostname or "").lower()
-    except ValueError:
-        return None
-    if not host:
-        return None
-    for domain, label in _PORTAL_DOMAINS:
-        if host == domain or host.endswith("." + domain):
-            return label
-    return None
 
 
 def _clean_str(value):
