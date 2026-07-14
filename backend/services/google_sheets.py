@@ -169,12 +169,38 @@ def update_row(row_number: int, property_dict: dict) -> int:
     return row_number
 
 
+# Columns the automation must never overwrite once a row already exists —
+# these are set/managed by brokers, not derived from any extracted value,
+# so there's no real data or instruction backing an automated overwrite.
+_NEVER_OVERWRITE_ON_UPDATE = {"onboarding_status"}
+
+
+def _merge_for_update(matched_row: dict, property_dict: dict) -> dict:
+    """Build the row to write when updating an existing match: only
+    overwrite a column if the new extraction actually produced a real
+    value for it, and never touch columns in _NEVER_OVERWRITE_ON_UPDATE.
+    Everything else keeps whatever was already in the sheet, so an
+    update can't blank out data a human already entered."""
+    merged = {}
+    for col in COLUMNS:
+        if col in _NEVER_OVERWRITE_ON_UPDATE:
+            merged[col] = matched_row.get(col)
+            continue
+        new_value = property_dict.get(col)
+        if new_value is None or new_value == "":
+            merged[col] = matched_row.get(col)
+        else:
+            merged[col] = new_value
+    return merged
+
+
 def upsert_row(property_dict: dict, matched_row: dict | None) -> tuple[int, str]:
     """Insert a new row, or update `matched_row` in place if given.
     Returns (row_number, action) where action is 'inserted' or 'updated'."""
     if matched_row is not None:
         row_number = matched_row["_row_number"]
-        update_row(row_number, property_dict)
+        merged = _merge_for_update(matched_row, property_dict)
+        update_row(row_number, merged)
         return row_number, "updated"
     row_number = append_row(property_dict)
     return row_number, "inserted"
