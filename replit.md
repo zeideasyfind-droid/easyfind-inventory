@@ -83,6 +83,18 @@ Existing repo layout (`frontend/`, `backend/`, `prompts/`, `Dockerfile`,
 `cloudbuild.yaml`, `requirements.txt`) was preserved as-is per the
 implementation spec — no reorganizing.
 
+## Setup status
+
+Imported project fully set up on 2026-07-14: Python 3.12 + all `requirements.txt`
+packages installed, `Start application` workflow running cleanly on port 5000,
+and all required secrets (`FIRECRAWL_API_KEY`, `GOOGLE_SHEET_ID`,
+`GOOGLE_SERVICE_ACCOUNT_JSON`, `GOOGLE_DRIVE_FOLDER_ID`) configured.
+
+A `HANDOVER.md` was referenced by a pasted instruction set (multi-portal UI
+copy, contact-extraction improvements, a Column B overwrite bug, and a
+redirect-URL bug) but does not exist anywhere in this repo. That work was
+captured as a separate follow-up project task instead of guessed at here.
+
 ## User preferences
 
 None recorded yet.
