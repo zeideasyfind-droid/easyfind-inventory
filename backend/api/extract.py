@@ -22,37 +22,34 @@ async def extract(payload: ExtractRequest):
     except FirecrawlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    # 2. Normalize the extracted fields.
+    # 2. Normalize the extracted fields into the exact sheet column values.
     normalized = normalize_property(raw)
-    normalized["portal_url"] = url
+    normalized["url"] = url
     normalized["property_id"] = generate_property_id()
     normalized["extracted_at"] = utc_now_iso()
 
-    # 3. Duplicate check against what's already in the sheet.
+    # 3. Check whether this listing already has a row (by URL, else by
+    # Contact Number + Society Name + Rent) so we upsert instead of
+    # creating a duplicate.
     try:
         existing_rows = google_sheets.get_existing_rows()
-    except GoogleSheetsError:
-        existing_rows = []
+    except GoogleSheetsError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    duplicate = duplicate_checker.find_duplicate(normalized, existing_rows)
-    if duplicate:
-        return {
-            "status": "duplicate",
-            "message": "This property already exists in the inventory.",
-            "matched_property_id": duplicate.get("property_id"),
-        }
+    matched_row = duplicate_checker.find_matching_row(normalized, existing_rows)
 
     # 4. Archive the JSON before writing to Sheets (never skipped).
     google_drive.archive_property(normalized)
 
-    # 5. Append the inventory row to Google Sheets.
+    # 5. Insert or update the inventory row in Google Sheets.
     try:
-        sheet_row = google_sheets.append_row(normalized)
+        sheet_row, action = google_sheets.upsert_row(normalized, matched_row)
     except GoogleSheetsError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return {
         "status": "success",
+        "action": action,
         "property_id": normalized["property_id"],
         "sheet_row": sheet_row,
     }

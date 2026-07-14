@@ -1,35 +1,62 @@
-"""Normalizes raw extracted property data into consistent, typed values."""
+"""Normalizes raw extracted property data into the exact values required
+by the EasyFind Google Sheet column mapping (columns A-W).
+"""
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 from backend.utils import extract_number
 
-_FURNISHING_MAP = {
-    "unfurnished": "Unfurnished",
-    "un-furnished": "Unfurnished",
-    "no furnishing": "Unfurnished",
-    "semi": "Semi-Furnished",
-    "semi-furnished": "Semi-Furnished",
-    "semi furnished": "Semi-Furnished",
-    "partially furnished": "Semi-Furnished",
-    "furnished": "Furnished",
-    "fully furnished": "Furnished",
-    "full furnished": "Furnished",
-}
+
+_NULLISH_STRINGS = {"null", "none", "n/a", "na", "nil", "-"}
 
 
 def _clean_str(value):
     if value is None:
         return None
     value = str(value).strip()
-    return value or None
+    if not value or value.lower() in _NULLISH_STRINGS:
+        return None
+    return value
+
+
+# ---------------------------------------------------------------- money ---
+
+_LAKH_RE = re.compile(r"([\d.]+)\s*l(?:akh)?s?\b", re.IGNORECASE)
+_THOUSAND_RE = re.compile(r"([\d.]+)\s*k\b", re.IGNORECASE)
+_INCLUDED_RE = re.compile(r"includ", re.IGNORECASE)
 
 
 def normalize_money(value):
-    return extract_number(value)
+    """Parse rent/deposit/maintenance values like '65k', '3L', '25,000',
+    'Included' (-> 0) into a plain numeric value."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    text = str(value).strip()
+    if not text:
+        return None
+    if _INCLUDED_RE.search(text):
+        return 0.0
+
+    lakh_match = _LAKH_RE.search(text)
+    if lakh_match:
+        return float(lakh_match.group(1)) * 100000
+
+    thousand_match = _THOUSAND_RE.search(text)
+    if thousand_match:
+        return float(thousand_match.group(1)) * 1000
+
+    return extract_number(text)
 
 
-def normalize_bhk(value):
+# ------------------------------------------------------------------ bhk ---
+
+_ALLOWED_BHK = {1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5}
+
+
+def normalize_bhk_number(value):
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -38,9 +65,73 @@ def normalize_bhk(value):
     return float(match.group()) if match else None
 
 
-def normalize_int(value):
+def bhk_label(bhk_value):
+    """Column G: '1 BHK' .. '4+ BHK' / '5 BHK'."""
+    if bhk_value is None:
+        return None
+    if bhk_value > 4 and bhk_value < 5:
+        return "4+ BHK"
+    if bhk_value == int(bhk_value):
+        return f"{int(bhk_value)} BHK"
+    return f"{bhk_value:g} BHK"
+
+
+# ------------------------------------------------------------ int counts ---
+
+
+def normalize_int(value, default=None):
     number = extract_number(value)
-    return int(round(number)) if number is not None else None
+    if number is None:
+        return default
+    return int(round(number))
+
+
+# ------------------------------------------------------------------ area --
+
+
+def normalize_area_number(value):
+    return extract_number(value)
+
+
+def area_label(area_value):
+    """Column J: numeric value with 'Sq. Ft.' formatting."""
+    if area_value is None:
+        return None
+    if area_value == int(area_value):
+        return f"{int(area_value)} Sq. Ft."
+    return f"{area_value:g} Sq. Ft."
+
+
+# ----------------------------------------------------------------- floor --
+
+
+def floor_label(floor, total_floors):
+    """Column K: 'Floor/Total Floors', e.g. '3/10'."""
+    floor_num = extract_number(floor)
+    total_num = extract_number(total_floors)
+    if floor_num is None and total_num is None:
+        return None
+    floor_str = str(int(floor_num)) if floor_num is not None else "?"
+    total_str = str(int(total_num)) if total_num is not None else "?"
+    return f"{floor_str}/{total_str}"
+
+
+# ------------------------------------------------------------- furnishing --
+
+_FURNISHING_MAP = {
+    "unfurnished": "Unfurnished",
+    "un-furnished": "Unfurnished",
+    "no furnishing": "Unfurnished",
+    "semi": "Semi Furnished",
+    "semi-furnished": "Semi Furnished",
+    "semifurnished": "Semi Furnished",
+    "semi furnished": "Semi Furnished",
+    "partially furnished": "Partially Furnished",
+    "partly furnished": "Partially Furnished",
+    "furnished": "Fully Furnished",
+    "fully furnished": "Fully Furnished",
+    "full furnished": "Fully Furnished",
+}
 
 
 def normalize_furnishing(value):
@@ -50,69 +141,144 @@ def normalize_furnishing(value):
     return _FURNISHING_MAP.get(key, _clean_str(value))
 
 
-def normalize_area(value):
-    return extract_number(value)
+# ------------------------------------------------------- tenant preference-
+
+_TENANT_MAP = {
+    "family": "Family",
+    "families": "Family",
+    "bachelor": "Bachelor",
+    "bachelors": "Bachelor",
+    "male bachelor": "Bachelor",
+    "female bachelor": "Female Bachelor",
+    "female bachelors": "Female Bachelor",
+    "company": "Company Lease",
+    "company lease": "Company Lease",
+    "corporate lease": "Company Lease",
+    "anyone": "Open For All",
+    "any": "Open For All",
+    "open": "Open For All",
+    "open for all": "Open For All",
+    "all": "Open For All",
+}
 
 
-def normalize_date(value):
-    """Best-effort conversion to YYYY-MM-DD. Falls back to the original
-    text (e.g. 'Immediate') when it can't be parsed as a date."""
+def normalize_tenant_preference(value):
+    if value is None:
+        return None
+    key = str(value).strip().lower()
+    return _TENANT_MAP.get(key, _clean_str(value))
+
+
+# --------------------------------------------------------------- veg/non --
+
+_VEG_MAP = {
+    "veg": "Veg",
+    "vegetarian": "Veg",
+    "non veg": "Non Veg",
+    "non-veg": "Non Veg",
+    "nonveg": "Non Veg",
+    "non vegetarian": "Non Veg",
+    "any": "Any",
+    "anyone": "Any",
+    "both": "Any",
+}
+
+
+def normalize_veg_non_veg(value):
+    if value is None:
+        return None
+    key = str(value).strip().lower()
+    return _VEG_MAP.get(key, _clean_str(value))
+
+
+# -------------------------------------------------------------------- pets
+
+_PETS_MAP = {
+    "allowed": "Allowed",
+    "yes": "Allowed",
+    "pet friendly": "Allowed",
+    "not allowed": "Not Allowed",
+    "no": "Not Allowed",
+    "not pet friendly": "Not Allowed",
+}
+
+
+def normalize_pets(value):
+    if value is None:
+        return None
+    key = str(value).strip().lower()
+    return _PETS_MAP.get(key, _clean_str(value))
+
+
+# ------------------------------------------------------------ available --
+
+_IMMEDIATE_VALUES = {
+    "immediate",
+    "immediately",
+    "ready to occupy",
+    "ready to move",
+    "available now",
+}
+
+
+def normalize_available_from(value, today=None):
     if value is None:
         return None
     text = str(value).strip()
     if not text:
         return None
-    if text.lower() in {"immediate", "immediately", "ready to move"}:
-        return "Immediate"
+
+    today = today or datetime.now(timezone.utc).date()
+    if text.lower() in _IMMEDIATE_VALUES:
+        return today.isoformat()
 
     for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d %b %Y", "%d %B %Y", "%b %d, %Y"):
         try:
-            return datetime.strptime(text, fmt).strftime("%Y-%m-%d")
+            return datetime.strptime(text, fmt).date().isoformat()
         except ValueError:
             continue
 
-    match = re.search(r"(\d+)\s*day", text.lower())
-    if match:
-        days = int(match.group(1))
-        return (datetime.utcnow() + timedelta(days=days)).strftime("%Y-%m-%d")
-
+    # Not a recognizable immediate phrase or parseable date: keep as-is
+    # so a genuine future date/phrase isn't lost.
     return text
 
 
-def normalize_amenities(value):
-    if not value:
-        return []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    return [part.strip() for part in re.split(r",|;", str(value)) if part.strip()]
+# ------------------------------------------------------------------ main --
 
 
-def normalize_property(raw: dict) -> dict:
-    """Take raw extracted JSON (any missing/messy fields) and return a
-    normalized dict matching the Property model's field names."""
+def normalize_property(raw: dict, today=None) -> dict:
+    """Take raw extracted JSON and return a dict of normalized values
+    keyed by the internal field names used in models.Property /
+    google_sheets column mapping."""
     raw = raw or {}
+    today = today or datetime.now(timezone.utc).date()
+
+    bhk_value = normalize_bhk_number(raw.get("bhk"))
+    area_value = normalize_area_number(raw.get("area"))
+
     return {
-        "title": _clean_str(raw.get("title")),
-        "rent": normalize_money(raw.get("rent")),
-        "deposit": normalize_money(raw.get("deposit")),
-        "maintenance": normalize_money(raw.get("maintenance")),
-        "bhk": normalize_bhk(raw.get("bhk")),
-        "bathrooms": normalize_int(raw.get("bathrooms")),
-        "balcony": normalize_int(raw.get("balcony")),
-        "furnishing": normalize_furnishing(raw.get("furnishing")),
-        "area": normalize_area(raw.get("area")),
-        "floor": _clean_str(raw.get("floor")),
-        "property_type": _clean_str(raw.get("property_type")),
-        "parking": _clean_str(raw.get("parking")),
-        "tenant_preference": _clean_str(raw.get("tenant_preference")),
-        "pets": _clean_str(raw.get("pets")),
-        "available_from": normalize_date(raw.get("available_from")),
+        "date": today.isoformat(),
+        "onboarding_status": "Done WFP",
+        "property_location": _clean_str(raw.get("property_location")),
+        "society_name": _clean_str(raw.get("society_name")),
         "owner_name": _clean_str(raw.get("owner_name")),
         "contact_number": _clean_str(raw.get("contact_number")),
-        "address": _clean_str(raw.get("address")),
-        "locality": _clean_str(raw.get("locality")),
-        "latitude": extract_number(raw.get("latitude")),
-        "longitude": extract_number(raw.get("longitude")),
-        "amenities": normalize_amenities(raw.get("amenities")),
-        "description": _clean_str(raw.get("description")),
+        "bhk": bhk_value,
+        "bhk_label": bhk_label(bhk_value),
+        "bathrooms": normalize_int(raw.get("bathrooms")),
+        "balcony": normalize_int(raw.get("balcony"), default=0),
+        "area": area_value,
+        "area_label": area_label(area_value),
+        "floor_label": floor_label(raw.get("floor"), raw.get("total_floors")),
+        "furnishing": normalize_furnishing(raw.get("furnishing")),
+        "tenant_preference": normalize_tenant_preference(raw.get("tenant_preference")),
+        "veg_non_veg": normalize_veg_non_veg(raw.get("veg_non_veg")),
+        "pets": normalize_pets(raw.get("pets")),
+        "rent": normalize_money(raw.get("rent")),
+        "maintenance": normalize_money(raw.get("maintenance")),
+        "deposit": normalize_money(raw.get("deposit")),
+        "available_from": normalize_available_from(raw.get("available_from"), today=today),
+        "negotiations": _clean_str(raw.get("negotiations")),
+        "visit_timings": _clean_str(raw.get("visit_timings")),
+        "portal": "Housing.com",
     }

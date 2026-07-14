@@ -8,8 +8,8 @@ router = APIRouter()
 
 @router.get("/inventory")
 async def inventory():
-    """Return everything currently stored in the Google Sheet, most
-    recent last, so the frontend (or a future dashboard) can list it."""
+    """Return everything currently stored in the Google Sheet worksheet,
+    for convenience (not part of the original spec)."""
     try:
         rows = google_sheets.get_existing_rows()
     except GoogleSheetsError as exc:

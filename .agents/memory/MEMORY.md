@@ -1,1 +1,2 @@
 - [Firecrawl structured extraction](firecrawl-structured-extraction.md) — Firecrawl's /v1/scrape with formats:["json"] does LLM extraction itself; no separate LLM API key needed.
+- [Google Sheets append() column-shift quirk](google-sheets-append-column-shift.md) — append() can misalign columns when the leading column is blank; write with explicit update() and a computed row number instead.

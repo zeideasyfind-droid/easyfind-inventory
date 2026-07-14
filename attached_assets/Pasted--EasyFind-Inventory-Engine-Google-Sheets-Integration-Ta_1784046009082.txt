@@ -1,0 +1,676 @@
+
+
+> **EasyFind Inventory Engine – Google Sheets Integration**
+
+
+
+### Target Spreadsheet
+
+
+
+* **Spreadsheet ID:** `1UGocHOV_ekLUKaWOWiq6toZteQjgmnYPrAqe1fss4Ho`
+
+* **Worksheet Name:** `April 2026 - March 2027`
+
+* **Worksheet ID:** `1438005815`
+
+
+
+**Never create a new worksheet.**
+
+
+
+Always open the existing worksheet named:
+
+
+
+```
+
+April 2026 - March 2027
+
+```
+
+
+
+If it does not exist, throw an error instead of creating another sheet. 
+
+
+
+---
+
+
+
+# Column Mapping
+
+
+
+| Sheet | Column             | Write                                     |
+
+| ----- | ------------------ | ----------------------------------------- |
+
+| A     | Date               | Current date                              |
+
+| B     | Onboarding Status  | `Done WFP` after successful extraction    |
+
+| C     | Property Location  | Firecrawl extraction                      |
+
+| D     | Society Name       | Firecrawl extraction                      |
+
+| E     | Owner Name         | Firecrawl extraction                      |
+
+| F     | Contact Info       | Firecrawl extraction                      |
+
+| G     | BHK                | Normalized BHK                            |
+
+| H     | Bathrooms          | Integer                                   |
+
+| I     | Balcony            | Integer                                   |
+
+| J     | Area               | Numeric value with **Sq. Ft.** formatting |
+
+| K     | Floor              | Floor/Total Floors                        |
+
+| L     | Furnishing Details | Normalized furnishing                     |
+
+| M     | Clients Preferred  | Normalized tenant preference              |
+
+| N     | Veg / Non-Veg      | Normalized                                |
+
+| O     | Pets               | Allowed / Not Allowed                     |
+
+| P     | Rent               | Numeric only                              |
+
+| Q     | Maintenance        | Numeric only                              |
+
+| R     | Deposit            | Numeric only                              |
+
+| S     | Available From     | Normalized date                           |
+
+| T     | Negotiations       | Extract if available                      |
+
+| U     | Visit Timings      | Extract if available                      |
+
+| V     | Portal             | Always `Housing.com`                      |
+
+| W     | URL                | Original listing URL                      |
+
+
+
+---
+
+
+
+# Mandatory Normalization Rules
+
+
+
+### Column A
+
+
+
+Use today's date.
+
+
+
+---
+
+
+
+### Column B
+
+
+
+Always
+
+
+
+```
+
+Done WFP
+
+```
+
+
+
+---
+
+
+
+### Column G
+
+
+
+Convert to
+
+
+
+```
+
+1 BHK
+
+2 BHK
+
+2.5 BHK
+
+3 BHK
+
+3.5 BHK
+
+4 BHK
+
+4+ BHK
+
+5 BHK
+
+```
+
+
+
+---
+
+
+
+### Column H
+
+
+
+Store only integer.
+
+
+
+Examples
+
+
+
+```
+
+3 attached
+
+→ 3
+
+
+
+3 all attached
+
+→ 3
+
+```
+
+
+
+---
+
+
+
+### Column I
+
+
+
+Store only integer.
+
+
+
+If missing
+
+
+
+```
+
+0
+
+```
+
+
+
+---
+
+
+
+### Column J
+
+
+
+Always append
+
+
+
+```
+
+Sq. Ft.
+
+```
+
+
+
+Example
+
+
+
+```
+
+1540
+
+
+
+becomes
+
+
+
+1540 Sq. Ft.
+
+```
+
+
+
+---
+
+
+
+### Column L
+
+
+
+Allowed values only
+
+
+
+```
+
+Fully Furnished
+
+Semi Furnished
+
+Unfurnished
+
+Partially Furnished
+
+```
+
+
+
+Convert variants
+
+
+
+```
+
+Semi
+
+semi
+
+Semifurnished
+
+
+
+↓
+
+
+
+Semi Furnished
+
+```
+
+
+
+---
+
+
+
+### Column M
+
+
+
+Normalize to
+
+
+
+```
+
+Family
+
+
+
+Bachelor
+
+
+
+Female Bachelor
+
+
+
+Company Lease
+
+
+
+Open For All
+
+```
+
+
+
+Examples
+
+
+
+```
+
+Anyone
+
+Any
+
+Open
+
+↓
+
+
+
+Open For All
+
+```
+
+
+
+---
+
+
+
+### Column N
+
+
+
+Normalize
+
+
+
+```
+
+Veg
+
+
+
+Non Veg
+
+
+
+Any
+
+```
+
+
+
+---
+
+
+
+### Column O
+
+
+
+Normalize
+
+
+
+```
+
+Allowed
+
+
+
+Not Allowed
+
+```
+
+
+
+---
+
+
+
+### Column P
+
+
+
+Store numeric rent only.
+
+
+
+Examples
+
+
+
+```
+
+65k
+
+
+
+↓
+
+
+
+65000
+
+```
+
+
+
+---
+
+
+
+### Column Q
+
+
+
+Store numeric maintenance.
+
+
+
+Examples
+
+
+
+```
+
+5k
+
+
+
+↓
+
+
+
+5000
+
+
+
+Included
+
+
+
+↓
+
+
+
+0
+
+```
+
+
+
+---
+
+
+
+### Column R
+
+
+
+Store numeric deposit.
+
+
+
+Examples
+
+
+
+```
+
+3L
+
+
+
+↓
+
+
+
+300000
+
+```
+
+
+
+---
+
+
+
+### Column S
+
+
+
+Normalize all availability values.
+
+
+
+Examples
+
+
+
+```
+
+Immediate
+
+Immediately
+
+Ready To Occupy
+
+Available Now
+
+
+
+↓
+
+
+
+Today's Date
+
+```
+
+
+
+If an actual future date is present, preserve it.
+
+
+
+---
+
+
+
+### Column T
+
+
+
+Negotiation notes exactly as extracted.
+
+
+
+---
+
+
+
+### Column U
+
+
+
+Visit timing exactly as extracted.
+
+
+
+---
+
+
+
+### Column V
+
+
+
+Always write
+
+
+
+```
+
+Housing.com
+
+```
+
+
+
+---
+
+
+
+### Column W
+
+
+
+Always save the original listing URL.
+
+
+
+---
+
+
+
+# Duplicate Rule
+
+
+
+Before inserting:
+
+
+
+* Compare using Listing URL (Column W).
+
+* If URL already exists, update the existing row instead of creating a duplicate.
+
+* If URL is unavailable, compare Contact Number + Society Name + Rent.
+
+
+
+---
+
+
+
+# Sheet Access Rule
+
+
+
+Open by worksheet name:
+
+
+
+```
+
+April 2026 - March 2027
+
+```
+
+
+
+Do **not** use the first sheet.
+
+Do **not** create a new sheet.
+
+Do **not** append to a sheet named "Sheet1" or any automatically created worksheet. Use only the worksheet `April 2026 - March 2027`. 
+

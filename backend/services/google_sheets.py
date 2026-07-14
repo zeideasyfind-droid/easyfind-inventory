@@ -1,5 +1,11 @@
-"""Append normalized property rows to a Google Sheet using a service
-account, and read back existing rows for duplicate checking.
+"""Reads/writes the EasyFind inventory sheet.
+
+Hard requirements from the integration spec:
+- Never create a new worksheet. Always use the existing worksheet named
+  WORKSHEET_NAME. If it doesn't exist, raise an error.
+- Columns A-W have a fixed mapping (see COLUMNS below).
+- Upsert semantics: if a row with the same Listing URL (column W) already
+  exists, update it in place instead of appending a duplicate.
 """
 import json
 
@@ -9,36 +15,37 @@ from googleapiclient.discovery import build
 from backend.config import settings
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-SHEET_TAB = "Inventory"
 
+WORKSHEET_NAME = "April 2026 - March 2027"
+
+# Column order = A..W, exactly as specified in the integration doc.
 COLUMNS = [
-    "property_id",
-    "extracted_at",
-    "portal_url",
-    "title",
-    "rent",
-    "deposit",
-    "maintenance",
-    "bhk",
-    "bathrooms",
-    "balcony",
-    "furnishing",
-    "area",
-    "floor",
-    "property_type",
-    "parking",
-    "tenant_preference",
-    "pets",
-    "available_from",
-    "owner_name",
-    "contact_number",
-    "address",
-    "locality",
-    "latitude",
-    "longitude",
-    "amenities",
-    "description",
+    "date",                 # A
+    "onboarding_status",    # B
+    "property_location",    # C
+    "society_name",         # D
+    "owner_name",           # E
+    "contact_number",       # F
+    "bhk_label",            # G
+    "bathrooms",            # H
+    "balcony",              # I
+    "area_label",           # J
+    "floor_label",          # K
+    "furnishing",           # L
+    "tenant_preference",    # M
+    "veg_non_veg",          # N
+    "pets",                 # O
+    "rent",                 # P
+    "maintenance",          # Q
+    "deposit",              # R
+    "available_from",       # S
+    "negotiations",         # T
+    "visit_timings",        # U
+    "portal",               # V
+    "url",                  # W
 ]
+
+URL_COLUMN_INDEX = COLUMNS.index("url")  # W
 
 
 class GoogleSheetsError(Exception):
@@ -62,85 +69,112 @@ def _get_service():
     return build("sheets", "v4", credentials=credentials, cache_discovery=False)
 
 
-def _ensure_tab_exists(service):
+def _require_worksheet_exists(service):
+    """Never create a new worksheet — verify WORKSHEET_NAME exists and
+    raise a clear error if it doesn't."""
     sheet_id = settings.GOOGLE_SHEET_ID
     metadata = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
     titles = [s["properties"]["title"] for s in metadata.get("sheets", [])]
-    if SHEET_TAB not in titles:
-        service.spreadsheets().batchUpdate(
-            spreadsheetId=sheet_id,
-            body={"requests": [{"addSheet": {"properties": {"title": SHEET_TAB}}}]},
-        ).execute()
+    if WORKSHEET_NAME not in titles:
+        raise GoogleSheetsError(
+            f"Worksheet '{WORKSHEET_NAME}' does not exist in spreadsheet "
+            f"{sheet_id}. Refusing to create a new worksheet — please "
+            f"create it manually (available worksheets: {titles})."
+        )
 
 
-def _ensure_header(service):
-    sheet_id = settings.GOOGLE_SHEET_ID
-    _ensure_tab_exists(service)
-    result = (
-        service.spreadsheets()
-        .values()
-        .get(spreadsheetId=sheet_id, range=f"{SHEET_TAB}!A1:Z1")
-        .execute()
-    )
-    if not result.get("values"):
-        service.spreadsheets().values().update(
-            spreadsheetId=sheet_id,
-            range=f"{SHEET_TAB}!A1",
-            valueInputOption="RAW",
-            body={"values": [COLUMNS]},
-        ).execute()
-
-
-def _row_to_dict(row: list) -> dict:
-    return {col: (row[i] if i < len(row) else None) for i, col in enumerate(COLUMNS)}
+def _row_to_dict(row: list, row_number: int) -> dict:
+    data = {col: (row[i] if i < len(row) else None) for i, col in enumerate(COLUMNS)}
+    data["_row_number"] = row_number
+    return data
 
 
 def get_existing_rows() -> list:
-    """Read back all inventory rows already in the sheet, for duplicate
-    checking. Returns an empty list if the sheet has no data yet."""
+    """Read back all inventory rows already in the worksheet, for
+    duplicate/update matching. Row 1 is assumed to be a header row."""
     service = _get_service()
-    _ensure_header(service)
+    _require_worksheet_exists(service)
     result = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=settings.GOOGLE_SHEET_ID, range=f"{SHEET_TAB}!A2:Z")
+        .get(
+            spreadsheetId=settings.GOOGLE_SHEET_ID,
+            range=f"'{WORKSHEET_NAME}'!A2:W",
+        )
         .execute()
     )
     rows = result.get("values", [])
-    return [_row_to_dict(row) for row in rows]
+    # Row 2 in the sheet is index 0 here.
+    return [_row_to_dict(row, i + 2) for i, row in enumerate(rows)]
 
 
-def append_row(property_dict: dict) -> int:
-    """Append one property row and return its 1-based row number."""
-    service = _get_service()
-    _ensure_header(service)
-
+def _dict_to_values(property_dict: dict) -> list:
     values = []
     for col in COLUMNS:
         value = property_dict.get(col)
         if isinstance(value, list):
             value = ", ".join(str(v) for v in value)
         values.append("" if value is None else value)
+    return values
 
+
+def _next_empty_row_number(service) -> int:
+    """Find the row right after the last row that has any data in A:W.
+
+    Deliberately avoids values().append() — with a fixed target range and
+    an explicit row/column write via values().update(), there is no
+    ambiguity about which column a new row lands in. (append() was found
+    to mis-detect the table's start column and silently shift writes by
+    one column when column A is entirely blank, which it is in this
+    sheet's historical data.)
+    """
     result = (
         service.spreadsheets()
         .values()
-        .append(
-            spreadsheetId=settings.GOOGLE_SHEET_ID,
-            range=f"{SHEET_TAB}!A1",
-            valueInputOption="RAW",
-            insertDataOption="INSERT_ROWS",
-            body={"values": [values]},
-        )
+        .get(spreadsheetId=settings.GOOGLE_SHEET_ID, range=f"'{WORKSHEET_NAME}'!A1:W")
         .execute()
     )
+    rows = result.get("values", [])
+    return len(rows) + 1
 
-    updated_range = result.get("updates", {}).get("updatedRange", "")
-    row_number = None
-    if "!" in updated_range:
-        cell_range = updated_range.split("!")[1]
-        start_cell = cell_range.split(":")[0]
-        digits = "".join(ch for ch in start_cell if ch.isdigit())
-        if digits:
-            row_number = int(digits)
-    return row_number or len(get_existing_rows()) + 1
+
+def append_row(property_dict: dict) -> int:
+    """Append one property row to WORKSHEET_NAME and return its 1-based
+    row number."""
+    service = _get_service()
+    _require_worksheet_exists(service)
+    row_number = _next_empty_row_number(service)
+    values = _dict_to_values(property_dict)
+    service.spreadsheets().values().update(
+        spreadsheetId=settings.GOOGLE_SHEET_ID,
+        range=f"'{WORKSHEET_NAME}'!A{row_number}:W{row_number}",
+        valueInputOption="RAW",
+        body={"values": [values]},
+    ).execute()
+    return row_number
+
+
+def update_row(row_number: int, property_dict: dict) -> int:
+    """Overwrite an existing row (A:W) in place. Returns the row number."""
+    service = _get_service()
+    _require_worksheet_exists(service)
+
+    values = _dict_to_values(property_dict)
+    service.spreadsheets().values().update(
+        spreadsheetId=settings.GOOGLE_SHEET_ID,
+        range=f"'{WORKSHEET_NAME}'!A{row_number}:W{row_number}",
+        valueInputOption="RAW",
+        body={"values": [values]},
+    ).execute()
+    return row_number
+
+
+def upsert_row(property_dict: dict, matched_row: dict | None) -> tuple[int, str]:
+    """Insert a new row, or update `matched_row` in place if given.
+    Returns (row_number, action) where action is 'inserted' or 'updated'."""
+    if matched_row is not None:
+        row_number = matched_row["_row_number"]
+        update_row(row_number, property_dict)
+        return row_number, "updated"
+    row_number = append_row(property_dict)
+    return row_number, "inserted"

@@ -53,8 +53,9 @@ form.addEventListener("submit", async (event) => {
         data.message || "This property already exists in the inventory.";
       showState("duplicate");
     } else if (data.status === "success") {
+      const verb = data.action === "updated" ? "updated in" : "saved to";
       document.getElementById("success-details").textContent =
-        `Property ${data.property_id} saved to row ${data.sheet_row} in Google Sheets.`;
+        `Property ${data.property_id} ${verb} row ${data.sheet_row} in Google Sheets.`;
       showState("success");
     } else {
       throw new Error("Unexpected response from the server.");

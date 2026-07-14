@@ -16,6 +16,33 @@ archives the raw JSON, and appends a row to a Google Sheet.
   Google Drive (JSON archives) if `GOOGLE_DRIVE_FOLDER_ID` is set, else
   local `archives/YYYY/MM/DD/` folders
 
+## Google Sheets integration
+
+Writes go to a **fixed, pre-existing worksheet** — `April 2026 - March 2027`
+inside spreadsheet `GOOGLE_SHEET_ID`. The app never creates a worksheet;
+if that tab is missing, `/extract` fails with a clear error instead of
+creating a new one (`backend/services/google_sheets.py`).
+
+Columns A-W have a fixed mapping (date, onboarding status, property
+location, society name, owner name, contact info, BHK, bathrooms,
+balcony, area, floor/total floors, furnishing, tenant preference,
+veg/non-veg, pets, rent, maintenance, deposit, available-from,
+negotiations, visit timings, portal, URL) — see `COLUMNS` in that file
+and the normalization rules in `backend/services/normalizer.py`.
+
+**Upsert rule, not reject-on-duplicate:** before writing, the app looks
+for an existing row matching the listing URL (column W); if found, that
+row is updated in place. If the candidate has no URL, it falls back to
+matching Contact Number + Society Name + Rent. See
+`backend/services/duplicate_checker.py`.
+
+Writes use an explicit `A{row}:W{row}` range via `values().update()`,
+never `values().append()`. Sheets' append-with-autodetect was found to
+mis-identify which column a table starts in when column A has no header
+text and is entirely blank (true for this sheet's historical data),
+silently shifting an entire row one column to the right. Always compute
+the target row explicitly and write with `update()` instead.
+
 ## Running locally on Replit
 
 The `Start application` workflow runs:
@@ -46,8 +73,8 @@ returns a clear error explaining which variable is missing.
 
 - `GET /` — frontend
 - `GET /health` — `{"status": "ok"}`
-- `POST /extract` — `{"url": "..."}` → `{"status": "success", "property_id": "...", "sheet_row": N}`
-  (or `{"status": "duplicate", ...}` if already in the sheet)
+- `POST /extract` — `{"url": "..."}` → `{"status": "success", "action": "inserted"|"updated", "property_id": "...", "sheet_row": N}`
+  (upserts by Listing URL, or by Contact Number + Society Name + Rent if no URL match)
 - `GET /inventory` — dumps current sheet rows (added for convenience, not in original spec)
 
 ## Project structure

@@ -1,10 +1,10 @@
-"""Duplicate detection against previously-ingested inventory rows.
+"""Duplicate detection against rows already in the Google Sheet.
 
-Priority order (first match wins):
-  1. Listing URL
-  2. Contact number
-  3. Property address
-  4. Combination of Rent + Area + BHK
+Per the integration spec, this is an upsert rule, not a reject rule:
+  1. Compare using Listing URL (column W). If it matches, the caller
+     should UPDATE that row instead of inserting a new one.
+  2. If the candidate has no URL, compare Contact Number + Society Name
+     + Rent instead.
 """
 
 
@@ -25,43 +25,31 @@ def _norm_number(value):
         return None
 
 
-def find_duplicate(candidate: dict, existing_rows: list) -> dict | None:
-    """`candidate` is the normalized property dict (plus portal_url).
-    `existing_rows` is a list of dicts with the same keys, typically read
-    back from Google Sheets. Returns the matching existing row, or None.
-    """
-    candidate_url = _norm(candidate.get("portal_url"))
-    candidate_contact = _norm(candidate.get("contact_number"))
-    candidate_address = _norm(candidate.get("address"))
-    candidate_combo = (
-        _norm_number(candidate.get("rent")),
-        _norm_number(candidate.get("area")),
-        _norm_number(candidate.get("bhk")),
-    )
-
+def find_matching_row(candidate: dict, existing_rows: list) -> dict | None:
+    """`candidate` uses the same field names as the sheet columns (url,
+    contact_number, society_name, rent). `existing_rows` come from
+    google_sheets.get_existing_rows(). Returns the matching row dict
+    (including its `_row_number`), or None if there's no match."""
+    candidate_url = _norm(candidate.get("url"))
     if candidate_url:
         for row in existing_rows:
-            if _norm(row.get("portal_url")) == candidate_url:
+            if _norm(row.get("url")) == candidate_url:
                 return row
+        return None
 
-    if candidate_contact:
-        for row in existing_rows:
-            if _norm(row.get("contact_number")) == candidate_contact:
-                return row
+    candidate_contact = _norm(candidate.get("contact_number"))
+    candidate_society = _norm(candidate.get("society_name"))
+    candidate_rent = _norm_number(candidate.get("rent"))
 
-    if candidate_address:
-        for row in existing_rows:
-            if _norm(row.get("address")) == candidate_address:
-                return row
+    if not (candidate_contact and candidate_society and candidate_rent is not None):
+        return None
 
-    if all(value is not None for value in candidate_combo):
-        for row in existing_rows:
-            row_combo = (
-                _norm_number(row.get("rent")),
-                _norm_number(row.get("area")),
-                _norm_number(row.get("bhk")),
-            )
-            if None not in row_combo and row_combo == candidate_combo:
-                return row
+    for row in existing_rows:
+        if (
+            _norm(row.get("contact_number")) == candidate_contact
+            and _norm(row.get("society_name")) == candidate_society
+            and _norm_number(row.get("rent")) == candidate_rent
+        ):
+            return row
 
     return None
