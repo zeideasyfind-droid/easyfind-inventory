@@ -62,8 +62,20 @@ def _get_service():
     return build("sheets", "v4", credentials=credentials, cache_discovery=False)
 
 
+def _ensure_tab_exists(service):
+    sheet_id = settings.GOOGLE_SHEET_ID
+    metadata = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+    titles = [s["properties"]["title"] for s in metadata.get("sheets", [])]
+    if SHEET_TAB not in titles:
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=sheet_id,
+            body={"requests": [{"addSheet": {"properties": {"title": SHEET_TAB}}}]},
+        ).execute()
+
+
 def _ensure_header(service):
     sheet_id = settings.GOOGLE_SHEET_ID
+    _ensure_tab_exists(service)
     result = (
         service.spreadsheets()
         .values()
