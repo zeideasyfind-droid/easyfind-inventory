@@ -1,5 +1,7 @@
 # Handover — Multi-Portal Bug Fixes (EasyFind Inventory Engine)
 
+> **Read this entire file before writing any code.** It reflects verified, current-state findings (some bugs already fixed and confirmed live) — do not re-diagnose from scratch or redo work described as already done below.
+
 Work directly on the connected GitHub repository, on the existing branch. Do not create a new repo, clone elsewhere, or use temp directories. Do not touch anything outside the 3 points below (Firecrawl prompt/schema, normalization logic, sheet column mapping, duplicate detection, backend architecture, API routes, Dockerfile, Cloud Build/Run config, and env vars are all out of scope unless explicitly called out here).
 
 Context: this repo scrapes rental listings via Firecrawl and writes rows to a fixed Google Sheet worksheet ("April 2026 - March 2027", columns A–W). It was built and tested against Housing.com only; the user now needs it to work across 7 portals (MyGate, 99acres, MagicBricks, CommonFloor, NoBroker, Makaan, Housing.com). A live test run against 5 real listings (see Validation below) surfaced the concrete bugs consolidated into the 3 points below.
