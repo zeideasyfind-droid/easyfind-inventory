@@ -32,7 +32,9 @@ async def extract(payload: ExtractRequest):
     except GoogleSheetsError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    matched_row = duplicate_checker.find_matching_row(normalized, existing_rows)
+    match_result = duplicate_checker.find_best_match(normalized, existing_rows)
+    matched_row = match_result.row
+    normalized["property_fingerprint"] = match_result.fingerprint
 
     property_id = (
         matched_row.get("property_id")
