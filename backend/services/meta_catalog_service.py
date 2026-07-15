@@ -163,10 +163,10 @@ async def upsert_item(
     if not token:
         raise MetaCatalogAuthError("WHATSAPP_TOKEN / WHATSAPP_ACCESS_TOKEN is not configured.")
 
-    item = build_catalog_item(normalized, image_url)
-    property_id = item["id"]
+    property_id = normalized.get("property_id") or ""
     if not property_id:
         raise MetaCatalogError("Cannot sync a property without a property_id.")
+    item = build_catalog_item(normalized, image_url)
 
     payload = {
         "requests": [
@@ -215,11 +215,11 @@ async def upsert_batch(items: list[dict]) -> dict:
     for entry in items:
         normalized = entry.get("normalized", {})
         image_url = entry.get("image_url", "")
-        item = build_catalog_item(normalized, image_url)
-        pid = item.get("id")
+        pid = normalized.get("property_id") or ""
         if not pid:
             logger.warning("Skipping item with no property_id in batch sync.")
             continue
+        item = build_catalog_item(normalized, image_url)
         requests_payload.append({
             "method": "UPDATE",
             "retailer_id": pid,
