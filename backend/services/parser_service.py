@@ -62,6 +62,32 @@ _FURNISHING_KEYWORDS = (
     "furnished",
 )
 
+# Owner messages often state the community type themselves ("Community:
+# Gated Community"). This is the fallback used when Google Maps
+# enrichment can't resolve a place at all -- never used to override a
+# successful Maps lookup, only to avoid discarding known-good information
+# down to "Unknown" (08_GOOGLE_MAPS_ENRICHMENT.md).
+_COMMUNITY_LABEL_RE = re.compile(r"\bcommunity\b[:\-]?\s*([^\n]+)", re.IGNORECASE)
+_SOCIETY_LABEL_RE = re.compile(
+    r"\b(?:society|apartment|complex|building)\s*(?:name)?[:\-]\s*([^\n]+)", re.IGNORECASE
+)
+_SEMI_GATED_HINTS = ("semi-gated", "semi gated")
+_GATED_HINTS = ("gated",)
+_STANDALONE_HINTS = ("standalone", "stand-alone", "independent")
+
+
+def _normalize_owner_community(label_text: str | None) -> str | None:
+    if not label_text:
+        return None
+    lowered = label_text.lower()
+    if any(hint in lowered for hint in _SEMI_GATED_HINTS):
+        return "Semi-Gated"
+    if any(hint in lowered for hint in _GATED_HINTS):
+        return "Gated"
+    if any(hint in lowered for hint in _STANDALONE_HINTS):
+        return "Standalone"
+    return None
+
 
 def detect_maps_url(text: str) -> str | None:
     """Scan the pasted owner message and return the first valid Google
@@ -70,6 +96,43 @@ def detect_maps_url(text: str) -> str | None:
     if not match:
         return None
     return match.group(0).rstrip(").,!\u201d\u2019")
+
+
+# Lines that are just a label for the link itself, not a place name -- if
+# the line right before/after the Maps URL is one of these (or is the URL
+# line itself), it is never treated as a place-name hint.
+_MAPS_LABEL_LINE_RE = re.compile(
+    r"^(?:google\s*maps?\s*(?:link|location|pin)?|location|map|pin)\W*$", re.IGNORECASE
+)
+
+
+def _maps_place_hint(text: str, maps_url: str) -> str | None:
+    """When a shortened/pin-only Maps link carries no place name of its
+    own, owners often paste the society/building name as plain text right
+    next to the link (this is exactly what WhatsApp's own "share location"
+    message looks like: name on one line, link on the next). Look at the
+    lines immediately surrounding the URL for such a hint."""
+    lines = [line.strip() for line in (text or "").splitlines()]
+    url_line_index = None
+    for index, line in enumerate(lines):
+        if maps_url in line:
+            url_line_index = index
+            break
+    if url_line_index is None:
+        return None
+
+    for index in (url_line_index - 1, url_line_index + 1):
+        if index < 0 or index >= len(lines):
+            continue
+        candidate = lines[index]
+        if not candidate or maps_url in candidate:
+            continue
+        if _MAPS_LABEL_LINE_RE.match(candidate):
+            continue
+        if candidate.lower().startswith("community"):
+            continue
+        return candidate
+    return None
 
 
 def _find(regex, text):
@@ -83,6 +146,10 @@ def parse_owner_message(text: str) -> dict:
     formatter omits them rather than guessing a value."""
     text = text or ""
     maps_url = detect_maps_url(text)
+    maps_place_hint = _maps_place_hint(text, maps_url) if maps_url else None
+
+    owner_community = _normalize_owner_community(_find(_COMMUNITY_LABEL_RE, text))
+    owner_society = _find(_SOCIETY_LABEL_RE, text)
 
     bhk_value = None
     bhk_match = _BHK_RE.search(text)
@@ -135,6 +202,9 @@ def parse_owner_message(text: str) -> dict:
         "available_from": available_from,
         "brokerage_applicable": brokerage_applicable,
         "maps_url": maps_url,
+        "maps_place_hint": maps_place_hint,
+        "owner_community": owner_community,
+        "owner_society": owner_society,
         "raw_message": text.strip(),
     }
 

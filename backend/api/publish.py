@@ -27,14 +27,15 @@ async def _run_pipeline(owner_message: str, images: List[UploadFile]):
     maps_url = parsed.get("maps_url")
     if maps_url:
         # A Maps lookup failure must never break the publish flow -- fall
-        # back to Community: Unknown and keep the original URL, per
-        # 14_ERROR_HANDLING.md.
+        # back to whatever the owner's own message already said (parsed
+        # owner_community/owner_society) and keep the original URL, per
+        # 14_ERROR_HANDLING.md / 08_GOOGLE_MAPS_ENRICHMENT.md.
         try:
-            place = await maps_service.enrich_from_maps_url(maps_url)
+            place = await maps_service.enrich_from_maps_url(maps_url, parsed.get("maps_place_hint"))
         except Exception:
             place = None
 
-    community_info = community_service.classify_community(place)
+    community_info = community_service.classify_community(place, parsed)
     listing = formatter_service.build_listing(parsed, community_info, maps_url)
     return parsed, community_info, listing
 

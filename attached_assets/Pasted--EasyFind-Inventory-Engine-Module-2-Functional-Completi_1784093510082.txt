@@ -1,0 +1,273 @@
+# EasyFind Inventory Engine – Module 2 Functional Completion (Pre-Production)
+
+Work on the existing repository.
+
+Do NOT create a new repository.
+
+Do NOT create a new branch.
+
+Work only on the existing deployment branch.
+
+Commit and push only after all validation passes.
+
+==========================================================
+OBJECTIVE
+==========================================================
+
+Module 2 is close to completion, but before refining the formatter, the entire workflow must become fully functional and production-ready.
+
+This phase is NOT about improving the listing format.
+
+This phase is about making the complete publishing workflow work reliably from start to finish.
+
+==========================================================
+PRIORITY ORDER
+==========================================================
+
+Complete work strictly in this order.
+
+Priority 1
+Desktop Responsive UI
+
+Priority 2
+WhatsApp Integration
+
+Priority 3
+Google Maps Enrichment
+
+Priority 4
+End-to-End Validation
+
+Formatter improvements will be handled in a later phase.
+
+Do NOT spend time redesigning the formatter now.
+
+==========================================================
+TASK 1 — Desktop UI Enhancement
+==========================================================
+
+Implement the desktop responsiveness described below.
+
+The current page behaves like a stretched mobile page.
+
+Use the available desktop width efficiently.
+
+Recommended layout:
+
+---------------------------------------------------------
+
++---------------------------------------------------------------+
+|                     EasyFind Property Publisher               |
++---------------------------------------------------------------+
+
++-----------------------------+-------------------------------+
+|                             |                               |
+|        INPUT PANEL          |       LIVE PREVIEW PANEL      |
+|                             |                               |
+|  Owner Message              |  Generated Listing Preview    |
+|                             |                               |
+|  Upload Images / Videos     |  Media Preview               |
+|                             |                               |
+|  Generate Preview           |                               |
+|                             |                               |
++-----------------------------+-------------------------------+
+
++---------------------------------------------------------------+
+|                  Send to WhatsApp Button                      |
++---------------------------------------------------------------+
+
+---------------------------------------------------------
+
+Desktop:
+
+Two-column layout.
+
+Tablet:
+
+Adaptive layout.
+
+Mobile:
+
+Remain unchanged.
+
+Do NOT change backend logic.
+
+==========================================================
+TASK 2 — WhatsApp Integration
+==========================================================
+
+The current implementation is not functional.
+
+The application reports:
+
+"WhatsApp Cloud API is not configured."
+
+Fix the integration completely.
+
+Reuse the Meta WhatsApp Cloud API architecture already adopted in this repository.
+
+Verify:
+
+✓ Authentication
+
+✓ Environment variables
+
+✓ Phone Number ID
+
+✓ Access Token
+
+✓ Recipient Number
+
+✓ Media Upload
+
+✓ Image Sending
+
+✓ Video Sending
+
+✓ Mixed Media Sending
+
+✓ Proper error handling
+
+If configuration is missing, clearly document every required environment variable.
+
+Do NOT leave placeholder implementations.
+
+==========================================================
+TASK 3 — Google Maps Enrichment
+==========================================================
+
+The current implementation is not correctly enriching the listing.
+
+Example observed:
+
+Input:
+
+Community: Gated Community
+
+Google Maps Link
+
+Odion The Woods of East
+
+Output:
+
+Community: Unknown
+
+This is incorrect.
+
+Improve the enrichment pipeline.
+
+The system should:
+
+Expand shortened Google Maps URLs if required.
+
+Resolve the place.
+
+Extract:
+
+• Society Name
+
+• Apartment Name
+
+• Landmark
+
+• Locality
+
+• Community Type
+
+If Google Maps lookup succeeds:
+
+Prefer Google Maps information.
+
+If Google Maps lookup fails:
+
+Gracefully fall back to values already present in the owner's message.
+
+Never replace known information with "Unknown" if valid information already exists.
+
+==========================================================
+TASK 4 — End-to-End Validation
+==========================================================
+
+Run complete validation.
+
+Verify:
+
+✓ Desktop UI works.
+
+✓ Mobile UI still works.
+
+✓ Images upload successfully.
+
+✓ Videos upload successfully.
+
+✓ Mixed media upload works.
+
+✓ Media order is preserved.
+
+✓ Preview generation works.
+
+✓ Google Maps enrichment works.
+
+✓ WhatsApp delivery works.
+
+✓ No JavaScript console errors.
+
+✓ No backend exceptions.
+
+✓ No responsive layout issues.
+
+==========================================================
+DO NOT CHANGE
+==========================================================
+
+Do NOT redesign the formatter.
+
+Do NOT modify Module 1.
+
+Do NOT modify Firecrawl.
+
+Do NOT modify Inventory Engine.
+
+Do NOT modify PID.
+
+Do NOT modify Duplicate Detection.
+
+Do NOT modify Archive.
+
+Do NOT modify Google Sheets.
+
+Do NOT introduce unrelated improvements.
+
+Stay focused only on making Module 2 fully operational.
+
+==========================================================
+DELIVERABLES
+==========================================================
+
+Provide:
+
+1. Files modified.
+
+2. Desktop screenshots.
+
+3. Mobile screenshots.
+
+4. Tablet screenshots.
+
+5. WhatsApp integration validation.
+
+6. Google Maps validation.
+
+7. Media validation.
+
+8. List of required environment variables.
+
+9. Validation summary.
+
+10. Commit hash.
+
+11. Push to the deployment branch.
+
+IMPORTANT
+
+If any functionality cannot be validated because credentials or external services are unavailable, explicitly state what could not be verified instead of assuming it works.

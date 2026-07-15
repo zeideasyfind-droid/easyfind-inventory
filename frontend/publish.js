@@ -3,7 +3,9 @@ const ownerMessageInput = document.getElementById("owner-message");
 const dropzone = document.getElementById("dropzone");
 const imageInput = document.getElementById("image-input");
 const imageList = document.getElementById("image-list");
+const mediaPreview = document.getElementById("media-preview");
 const previewBtn = document.getElementById("preview-btn");
+const sendBar = document.getElementById("send-bar");
 const sendBtn = document.getElementById("send-btn");
 const editBtn = document.getElementById("edit-btn");
 const publishState = document.getElementById("publish-state");
@@ -11,6 +13,8 @@ const previewPanel = document.getElementById("preview-panel");
 const previewText = document.getElementById("preview-text");
 const previewMeta = document.getElementById("preview-meta");
 const publishResult = document.getElementById("publish-result");
+
+const DEFAULT_PREVIEW_TEXT = "Fill in the owner message and click Generate Preview to see the formatted listing here.";
 
 let selectedFiles = [];
 
@@ -29,6 +33,25 @@ function renderImageList() {
     });
     item.appendChild(remove);
     imageList.appendChild(item);
+  });
+  renderMediaPreview();
+}
+
+// Purely visual thumbnail strip in the live-preview column -- mirrors the
+// upload order shown in the chip list above, but never touches what gets
+// submitted (buildFormData still reads straight from selectedFiles).
+function renderMediaPreview() {
+  mediaPreview.querySelectorAll("img,video").forEach((el) => URL.revokeObjectURL(el.src));
+  mediaPreview.innerHTML = "";
+  selectedFiles.forEach((file) => {
+    const url = URL.createObjectURL(file);
+    const el = document.createElement(file.type.startsWith("video/") ? "video" : "img");
+    el.src = url;
+    el.className = "media-thumb";
+    if (el.tagName === "VIDEO") {
+      el.muted = true;
+    }
+    mediaPreview.appendChild(el);
   });
 }
 
@@ -98,7 +121,7 @@ publishForm.addEventListener("submit", async (event) => {
 
   previewBtn.disabled = true;
   showPublishState("Parsing message and enriching with Google Maps\u2026", "loading");
-  previewPanel.classList.add("hidden");
+  sendBar.classList.add("hidden");
 
   try {
     const response = await fetch("/publish/preview", {
@@ -114,7 +137,7 @@ publishForm.addEventListener("submit", async (event) => {
     previewText.textContent = data.preview;
     const locationLabel = data.society || data.landmark || "not identified";
     previewMeta.textContent = `Community: ${data.community} \u2014 ${locationLabel}`;
-    previewPanel.classList.remove("hidden");
+    sendBar.classList.remove("hidden");
     showPublishState("");
   } catch (err) {
     showPublishState(err.message, "error");
@@ -124,7 +147,9 @@ publishForm.addEventListener("submit", async (event) => {
 });
 
 editBtn.addEventListener("click", () => {
-  previewPanel.classList.add("hidden");
+  sendBar.classList.add("hidden");
+  previewText.textContent = DEFAULT_PREVIEW_TEXT;
+  previewMeta.textContent = "";
   showResult("");
 });
 
@@ -145,13 +170,15 @@ sendBtn.addEventListener("click", async () => {
 
     if (data.success) {
       showResult(
-        `Sent ${data.image_count} photo${data.image_count === 1 ? "" : "s"} to WhatsApp (message ${data.message_id}).`,
+        `Sent ${data.image_count} file${data.image_count === 1 ? "" : "s"} to WhatsApp (message ${data.message_id}).`,
         "success"
       );
       selectedFiles = [];
       renderImageList();
       ownerMessageInput.value = "";
-      previewPanel.classList.add("hidden");
+      sendBar.classList.add("hidden");
+      previewText.textContent = DEFAULT_PREVIEW_TEXT;
+      previewMeta.textContent = "";
     } else {
       showResult(
         `WhatsApp delivery failed: ${data.error || "unknown error"}. The listing text above is unchanged \u2014 you can copy it manually or retry.`,

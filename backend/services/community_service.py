@@ -32,14 +32,27 @@ _GATED_KEYWORDS = (
 _NAMED_PLACE_TYPES = {"premise", "subpremise", "establishment", "lodging"}
 
 
-def classify_community(place: dict | None) -> dict:
+def classify_community(place: dict | None, owner_hint: dict | None = None) -> dict:
     """Returns {"community": ..., "society": ..., "landmark": ...}.
+
+    `place` (from maps_service) is always preferred when present -- it's
+    the one source that can actually confirm a real building. `owner_hint`
+    (parser_service's owner_community/owner_society, taken straight from
+    labels like "Community: Gated Community" in the raw message) is only
+    used when Maps enrichment produced nothing at all, so a value the
+    owner already gave us is never discarded down to "Unknown"
+    (08_GOOGLE_MAPS_ENRICHMENT.md).
 
     Never expose the exact standalone property address (07_FORMATTER_ENGINE
     / 09_COMMUNITY_DETECTION) -- only a nearby public landmark is surfaced
     for Standalone listings, never formatted_address/coordinates.
     """
     if not place or not (place.get("name") or "").strip():
+        owner_hint = owner_hint or {}
+        community = owner_hint.get("owner_community")
+        society = owner_hint.get("owner_society")
+        if community or society:
+            return {"community": community or "Unknown", "society": society, "landmark": None}
         return {"community": "Unknown", "society": None, "landmark": None}
 
     name = place["name"].strip()

@@ -86,15 +86,25 @@ async def _nearest_landmark(client: httpx.AsyncClient, api_key: str, coords):
     }
 
 
-async def enrich_from_maps_url(maps_url: str) -> dict | None:
+async def enrich_from_maps_url(maps_url: str, text_place_hint: str | None = None) -> dict | None:
     """Returns a dict with name/types/source, or None if enrichment could
-    not be completed at all (caller continues with Community: Unknown)."""
+    not be completed at all (caller falls back to whatever the owner's own
+    message said, per 08_GOOGLE_MAPS_ENRICHMENT.md, rather than Unknown).
+
+    `text_place_hint` is a candidate place name pulled from the raw owner
+    message near the Maps link (parser_service._maps_place_hint) -- used
+    only when the URL itself carries no name (a bare pin / shortened link
+    with nothing in its path), since that's the one case where Places has
+    nothing to search for otherwise.
+    """
     api_key = settings.GOOGLE_MAPS_API_KEY
     if not api_key or not maps_url:
         return None
 
     resolved_url = await _resolve_redirect(maps_url)
     place_name, coords = extract_place_hint(resolved_url)
+    if not place_name and text_place_hint:
+        place_name = text_place_hint
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:

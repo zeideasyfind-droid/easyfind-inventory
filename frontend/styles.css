@@ -150,6 +150,78 @@ button:disabled {
   margin-top: 24px;
 }
 
+.publish-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.input-panel,
+.preview-panel-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.preview-panel-col h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.media-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.media-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.send-bar {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.send-bar.hidden {
+  display: none;
+}
+
+.send-bar button {
+  flex: 1;
+}
+
+/* Tablet: keep a single column but let the card use more of the width. */
+@media (min-width: 700px) {
+  #publish-card {
+    max-width: 680px;
+  }
+}
+
+/* Desktop: two-column layout -- input panel left, live preview right. */
+@media (min-width: 1024px) {
+  #publish-card {
+    max-width: 960px;
+  }
+
+  .publish-layout {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .input-panel,
+  .preview-panel-col {
+    flex: 1;
+  }
+}
+
 textarea {
   padding: 12px 14px;
   border: 1px solid var(--border);
@@ -246,7 +318,6 @@ textarea:focus {
 }
 
 .preview-panel {
-  margin-top: 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px;

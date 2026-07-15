@@ -156,6 +156,26 @@ photo in original order, caption attached to the first only).
   Send button.
 - **Secrets:** `GOOGLE_MAPS_API_KEY`, `WHATSAPP_ACCESS_TOKEN`,
   `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_RECIPIENT_NUMBER` (see below).
+- **Desktop/tablet/mobile UI (2026-07-15):** `#publish-card` is a two-column
+  grid (`.publish-layout`) above 1024px — input panel left, live-preview
+  panel right, always visible (not just after a preview is generated); a
+  full-width send bar sits below both columns. Below 1024px it collapses
+  to the original single-column stacked layout unchanged. Purely
+  presentational — `frontend/publish.js` DOM ids are unchanged, no backend
+  logic touched.
+- **Google Maps enrichment fallback (2026-07-15):** if the Maps URL
+  resolves to nothing (dead/expired link, no place name or coordinates in
+  it), `parser_service.parse_owner_message` also extracts any
+  `Community: ...` / `Society|Apartment|Building: ...` label the owner
+  already put in their own message, and `community_service.classify_community`
+  falls back to that instead of "Unknown". A successful Maps lookup still
+  always wins — this fallback only fires when Maps enrichment produced
+  nothing at all, per 08_GOOGLE_MAPS_ENRICHMENT.md's "never replace known
+  information with Unknown" rule. Separately, when a shortened/pin-only
+  Maps link carries no place name of its own, the line of text immediately
+  before/after the link in the raw message (typical of WhatsApp's own
+  "share location" format: name on one line, link on the next) is used as
+  a Places API search hint before falling back to the owner's own labels.
 - **Storage:** intentionally stateless — uploaded media live only for the
   duration of the request; nothing from Module 2 is written to Module 1's
   Google Sheet or Drive archive.
