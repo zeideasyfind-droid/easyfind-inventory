@@ -85,9 +85,10 @@ def _get_drive_service():
 
 
 def _find_drive_folder(service, name: str, parent_id: str) -> str | None:
+    safe_name = name.replace("'", "\\'")
     query = (
         "mimeType = 'application/vnd.google-apps.folder' and "
-        f"name = '{name.replace("'", "\\'")}' and "
+        f"name = '{safe_name}' and "
         f"'{parent_id}' in parents and trashed = false"
     )
     result = service.files().list(q=query, fields="files(id, name)", pageSize=1).execute()
@@ -114,18 +115,17 @@ def _list_drive_files(service, folder_id: str) -> dict[str, str]:
     query = f"'{folder_id}' in parents and trashed = false"
     result = service.files().list(q=query, fields="files(id, name)", pageSize=100).execute()
     files = result.get("files", [])
-    by_name = {}
-    duplicates = {}
+    by_name: dict[str, str] = {}
+    duplicate_ids: list[str] = []
     for item in files:
-        name = item.get('name')
-        file_id = item.get('id')
+        name = item.get("name")
+        file_id = item.get("id")
         if name in by_name:
-            duplicates.setdefault(name, []).append(file_id)
+            duplicate_ids.append(file_id)
         else:
             by_name[name] = file_id
-    for name, ids in duplicates.items():
-        for dup_id in ids:
-            service.files().delete(fileId=dup_id).execute()
+    for file_id in duplicate_ids:
+        service.files().delete(fileId=file_id).execute()
     return by_name
 
 
