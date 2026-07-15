@@ -156,9 +156,47 @@ photo in original order, caption attached to the first only).
   Send button.
 - **Secrets:** `GOOGLE_MAPS_API_KEY`, `WHATSAPP_ACCESS_TOKEN`,
   `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_RECIPIENT_NUMBER` (see below).
-- **Storage:** intentionally stateless — uploaded images live only for the
+- **Storage:** intentionally stateless — uploaded media live only for the
   duration of the request; nothing from Module 2 is written to Module 1's
   Google Sheet or Drive archive.
+- **Supported media (2026-07-15):** JPG/PNG photos and MP4/3GP videos only,
+  in any mixed order — this matches WhatsApp Cloud API's own supported
+  format list exactly (Meta only accepts `image/jpeg`, `image/png`,
+  `video/mp4`, `video/3gpp` for outbound messages). WEBP, HEIC/HEIF, MOV
+  and M4V are rejected at `validate_publish_request` with a clear
+  "convert to X" message rather than failing silently at delivery.
+  `backend/services/whatsapp_service.py` uploads every file directly to
+  WhatsApp's own Media API (no third-party CDN) and sends one message per
+  file in original order, caption on the first only; failures use
+  exponential backoff (1s/2s/4s) for transient/5xx errors and fail fast
+  on 4xx.
+
+### WhatsApp migration reference (2026-07-15)
+
+A separate, older internal project's repo was reviewed as a migration
+reference for Module 2's WhatsApp layer. What was reused vs. not, and why:
+
+- **Reused:** the Bearer-token + `phone_number_id` auth pattern and a
+  `config.whatsapp` block with an `apiBaseUrl`-style getter (mirrored in
+  `backend/config.py`'s `Settings` properties); structured
+  info/warning/error logging that never logs the access token.
+- **Not reused — Cloudinary-hosted outbound links:** that project uploaded
+  every outbound image to Cloudinary first and sent WhatsApp a public
+  `link`, rather than uploading to WhatsApp's own Media API. Adopting that
+  would mean a brand-new external dependency + secrets just to get a
+  public URL, when uploading bytes directly to Meta's Media API already
+  works, is self-contained, and needs nothing else running. Decision:
+  keep direct Media API uploads as Module 2's only path; Cloudinary (if
+  ever configured) stays scoped to Module 1's own inventory storage, not
+  Module 2's send flow.
+  **Why:** explicit product decision — avoid a third-party CDN as a
+  prerequisite for sending a WhatsApp message; keep the send flow
+  self-contained.
+- **Not reused — video sending, retries:** that project's WhatsApp service
+  had no outbound video support and no retry logic of any kind (single
+  attempt, log-and-return-null on failure) — there was nothing to migrate
+  for either. Both were built fresh for Module 2 instead (video support
+  above; exponential-backoff retries in `whatsapp_service._with_retries`).
 
 ## Setup status
 

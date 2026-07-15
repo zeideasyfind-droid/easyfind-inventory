@@ -69,20 +69,20 @@ async def publish_send(
     except ValidationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-    image_payloads = []
+    media_payloads = []
     for image in images:
         content = await image.read()
-        image_payloads.append((image.filename or "image.jpg", content, image.content_type or "image/jpeg"))
+        media_payloads.append((image.filename or "media", content, image.content_type or "application/octet-stream"))
 
     try:
-        result = await send_media_album(image_payloads, listing)
+        result = await send_media_album(media_payloads, listing)
     except WhatsAppError as exc:
         # Never lose the generated caption on a delivery failure -- return
         # it so the broker can copy it manually and retry without having
         # to reformat, per 11_WHATSAPP_DELIVERY_ENGINE.md / 14_ERROR_HANDLING.md.
         return PublishSendResponse(
             success=False,
-            image_count=len(image_payloads),
+            image_count=len(media_payloads),
             delivery="failed",
             preview=listing,
             error=str(exc),
@@ -91,6 +91,6 @@ async def publish_send(
     return PublishSendResponse(
         success=True,
         message_id=result.get("message_id"),
-        image_count=result.get("image_count", len(image_payloads)),
+        image_count=result.get("image_count", len(media_payloads)),
         delivery="sent",
     )

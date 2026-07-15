@@ -64,10 +64,11 @@
         required
       ></textarea>
 
-      <label for="image-input">Property photos</label>
+      <label for="image-input">Property photos &amp; videos</label>
       <div id="dropzone" class="dropzone">
-        <p>Drag &amp; drop images here, or click to browse</p>
-        <input id="image-input" name="images" type="file" accept="image/*" multiple hidden />
+        <p>Drag &amp; drop photos or videos here, or click to browse</p>
+        <p class="dropzone-hint">JPG / PNG photos, MP4 / 3GP videos</p>
+        <input id="image-input" name="images" type="file" accept="image/jpeg,image/png,video/mp4,video/3gpp" multiple hidden />
       </div>
       <div id="image-list" class="image-list"></div>
 
