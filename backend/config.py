@@ -42,7 +42,7 @@ class Settings:
     @property
     def META_CATALOG_ID(self) -> str:
         # Explicit production catalog ID; can be overridden via env var.
-        return os.environ.get("META_CATALOG_ID", "2732462966455115")
+        return os.environ.get("META_CATALOG_ID", "1033806272839748")
 
     @property
     def CLOUDINARY_CLOUD_NAME(self) -> str:

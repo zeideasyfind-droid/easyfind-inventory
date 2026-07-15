@@ -32,3 +32,8 @@ waitForPort = 5000
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+META_CATALOG_ID = "1033806272839748"
