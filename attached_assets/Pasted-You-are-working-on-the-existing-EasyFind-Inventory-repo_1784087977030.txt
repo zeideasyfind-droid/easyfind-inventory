@@ -1,0 +1,291 @@
+You are working on the existing EasyFind Inventory repository.
+
+I have attached a ZIP containing the complete technical documentation for Module 2 (Property Publishing Engine).
+
+Before writing a single line of code, read EVERY document in the ZIP completely.
+
+Do not skip any document.
+
+Do not assume anything outside the documentation.
+
+==========================================================
+PRIMARY OBJECTIVE
+==========================================================
+
+Implement Module 2 exactly as documented.
+
+Module 2 is called:
+
+EasyFind Property Publishing Engine.
+
+Its responsibility is ONLY:
+
+Receive raw property details and uploaded images.
+
+Automatically detect the Google Maps link.
+
+Call Google Places API.
+
+Determine the correct community type.
+
+Generate the EasyFind listing.
+
+Deliver one WhatsApp media album with one caption to my configured EasyFind Business WhatsApp number.
+
+Nothing more.
+
+Nothing less.
+
+==========================================================
+DO NOT MODIFY MODULE 1
+==========================================================
+
+The existing Inventory Engine is production-ready.
+
+Do not change:
+
+Firecrawl
+
+Inventory extraction
+
+Duplicate detection
+
+PID generation
+
+Archive
+
+Google Sheets mapping
+
+Cloud Run configuration
+
+Existing APIs
+
+Unless absolutely required for integration.
+
+Module 2 must integrate cleanly without breaking Module 1.
+
+==========================================================
+READ THE DOCUMENTS IN ORDER
+==========================================================
+
+Read every document in sequence.
+
+00_README
+
+↓
+
+01_PRODUCT_REQUIREMENTS
+
+↓
+
+...
+
+↓
+
+19_REPLIT_IMPLEMENTATION_CHECKLIST
+
+Treat those documents as the source of truth.
+
+==========================================================
+IMPLEMENTATION APPROACH
+==========================================================
+
+Implement Module 2 incrementally.
+
+Phase 1
+
+Backend services.
+
+Phase 2
+
+Frontend.
+
+Phase 3
+
+Google Maps integration.
+
+Phase 4
+
+Formatter.
+
+Phase 5
+
+WhatsApp delivery.
+
+Phase 6
+
+Testing.
+
+Do not jump between phases.
+
+==========================================================
+GOOGLE MAPS
+==========================================================
+
+The user will NOT provide a separate Maps field.
+
+The Google Maps URL must be detected automatically from the pasted owner message.
+
+Implement automatic extraction.
+
+Do not ask the user for another input.
+
+==========================================================
+FORMATTER
+==========================================================
+
+The formatter must be deterministic.
+
+Never invent property details.
+
+Never generate marketing text.
+
+Never hallucinate values.
+
+Only use:
+
+Parsed owner message.
+
+Google Places enrichment.
+
+Documented EasyFind template.
+
+==========================================================
+WHATSAPP
+==========================================================
+
+The browser must NEVER call WhatsApp APIs directly.
+
+The backend must:
+
+Upload media.
+
+Generate media IDs.
+
+Send one media album.
+
+Attach one caption.
+
+Return delivery status.
+
+All credentials remain server-side.
+
+==========================================================
+CODE QUALITY
+==========================================================
+
+Follow production engineering standards.
+
+Small reusable services.
+
+Typed models.
+
+Proper logging.
+
+Validation.
+
+Meaningful errors.
+
+No duplicated logic.
+
+No hardcoded secrets.
+
+==========================================================
+ENGINEERING REVIEW
+==========================================================
+
+After implementation, perform a complete repository review.
+
+Check for:
+
+Unused code.
+
+Unused imports.
+
+Dead files.
+
+Configuration issues.
+
+Security issues.
+
+Performance issues.
+
+Only remove files after verifying they are unused.
+
+==========================================================
+TESTING
+==========================================================
+
+Run:
+
+Unit tests.
+
+Integration tests.
+
+End-to-end tests.
+
+Regression tests.
+
+Verify Module 1 still works exactly as before.
+
+Verify Module 2 works completely.
+
+==========================================================
+FINAL VALIDATION
+==========================================================
+
+Before pushing, verify:
+
+✓ Inventory Engine still works.
+
+✓ Property Publishing works.
+
+✓ Images upload correctly.
+
+✓ Google Maps enrichment works.
+
+✓ Community detection works.
+
+✓ Formatter follows EasyFind template.
+
+✓ WhatsApp delivery succeeds.
+
+✓ No regressions.
+
+==========================================================
+DELIVERABLES
+==========================================================
+
+When finished, provide:
+
+1. Executive summary.
+
+2. Files created.
+
+3. Files modified.
+
+4. Repository structure changes.
+
+5. Environment variables added.
+
+6. API endpoints added.
+
+7. Validation results.
+
+8. Test results.
+
+9. Security findings.
+
+10. Performance findings.
+
+11. Any assumptions made.
+
+12. Any remaining limitations.
+
+13. Commit hash.
+
+14. Push changes to GitHub.
+
+If any requirement from the attached documentation cannot be implemented exactly, STOP and explain why before making alternative design decisions.
+
+Do not make architectural decisions independently when the documentation already specifies the behaviour.
