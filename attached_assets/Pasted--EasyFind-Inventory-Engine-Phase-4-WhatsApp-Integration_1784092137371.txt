@@ -1,0 +1,287 @@
+# EasyFind Inventory Engine – Phase 4 (WhatsApp Integration Migration)
+
+You are working on the existing EasyFind Inventory Engine repository.
+
+I have attached another ZIP containing my previous production automation.
+
+That repository already has a fully working WhatsApp integration.
+
+==========================================================
+IMPORTANT
+==========================================================
+
+This is NOT a request to build a new WhatsApp integration.
+
+This is a migration task.
+
+Your objective is to study the previous implementation and migrate ONLY the WhatsApp functionality into the current EasyFind Inventory Engine.
+
+==========================================================
+SOURCE OF TRUTH
+==========================================================
+
+Use the attached repository ONLY as a reference.
+
+Study how WhatsApp is implemented there.
+
+Identify:
+
+• authentication
+• configuration
+• access token usage
+• phone number configuration
+• media upload
+• image sending
+• video sending
+• message sending
+• retries
+• error handling
+
+Understand the complete flow first.
+
+Do NOT blindly copy files.
+
+Integrate only what is required.
+
+==========================================================
+OBJECTIVE
+==========================================================
+
+Replace the current placeholder / incomplete WhatsApp implementation in Module 2.
+
+Do NOT build a second WhatsApp provider.
+
+Reuse the existing Meta WhatsApp Cloud API implementation from the previous project.
+
+The new application must become the single source of truth.
+
+The old repository is only a reference.
+
+==========================================================
+MEDIA SUPPORT
+==========================================================
+
+The current implementation only focuses on images.
+
+The migrated implementation MUST support BOTH:
+
+✓ Images
+
+✓ Videos
+
+Supported media should include:
+
+jpg
+jpeg
+png
+webp
+heic
+mp4
+mov
+m4v
+
+Preserve upload order.
+
+The user should be able to upload mixed media.
+
+Example:
+
+image
+
+image
+
+video
+
+image
+
+video
+
+Maintain exactly the uploaded order.
+
+==========================================================
+WHATSAPP DELIVERY
+==========================================================
+
+Study how the previous repository:
+
+uploads media
+
+obtains media IDs
+
+sends media
+
+handles failures
+
+handles authentication
+
+Reproduce the same behaviour inside the current backend.
+
+Do NOT introduce another WhatsApp library unless absolutely necessary.
+
+==========================================================
+DO NOT COPY
+==========================================================
+
+Do NOT migrate:
+
+old business logic
+
+old inventory logic
+
+old webhook logic
+
+old parser
+
+old formatting
+
+old routing
+
+old storage
+
+Only migrate the WhatsApp integration layer.
+
+==========================================================
+MODULE 2 RESPONSIBILITY
+==========================================================
+
+Module 2 should remain:
+
+Owner Message
+
+↓
+
+Parser
+
+↓
+
+Google Maps Enrichment
+
+↓
+
+Community Detection
+
+↓
+
+EasyFind Formatter
+
+↓
+
+Media Upload (Images + Videos)
+
+↓
+
+WhatsApp Cloud API
+
+↓
+
+Success Response
+
+==========================================================
+CONFIGURATION
+==========================================================
+
+Reuse the same environment variable naming convention from the previous project wherever practical.
+
+If additional variables are required, document them.
+
+Update:
+
+.env.example
+
+README
+
+Cloud Run configuration documentation
+
+==========================================================
+VALIDATION
+==========================================================
+
+Verify:
+
+✓ Image upload works.
+
+✓ Video upload works.
+
+✓ Mixed media works.
+
+✓ Upload order is preserved.
+
+✓ Authentication works.
+
+✓ Failed uploads return meaningful errors.
+
+✓ Existing Module 1 remains unaffected.
+
+✓ Existing Module 2 formatter remains unchanged.
+
+==========================================================
+DO NOT MODIFY
+==========================================================
+
+Do NOT modify:
+
+Formatter
+
+Google Maps enrichment
+
+Community detection
+
+Inventory Engine
+
+Firecrawl
+
+PID
+
+Duplicate Detection
+
+Archive
+
+Google Sheets
+
+Only replace the WhatsApp delivery layer.
+
+==========================================================
+FINAL AUDIT
+==========================================================
+
+After implementation:
+
+Perform a repository audit.
+
+Confirm:
+
+No duplicate WhatsApp implementations exist.
+
+No dead code remains.
+
+No obsolete configuration remains.
+
+No unused dependencies remain.
+
+==========================================================
+DELIVERABLES
+==========================================================
+
+Provide:
+
+1. Files studied from the previous repository.
+
+2. Files modified in the current repository.
+
+3. WhatsApp architecture before migration.
+
+4. WhatsApp architecture after migration.
+
+5. Media types supported.
+
+6. Environment variables required.
+
+7. Validation results.
+
+8. Repository cleanup summary.
+
+9. Commit hash.
+
+10. Push to the existing deployment branch.
+
+If you discover a better implementation than the previous repository, document it separately, but DO NOT replace the proven behaviour without explaining why.
