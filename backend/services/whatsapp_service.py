@@ -14,6 +14,14 @@ Every send request:
 
 Never logs the access token in full. Only the last 6 characters are logged
 for correlation with Meta's own logs.
+
+Graph API field note:
+  GET /{phone_number_id} supports: id, display_phone_number, verified_name,
+  quality_rating, status.
+  'whatsapp_business_account_id' is NOT available on this node via a Cloud API
+  access token -- it requires a Business Management token. Requesting it
+  returns HTTP 400 error.code=100. It is therefore excluded from the
+  verification query.
 """
 import asyncio
 import json
@@ -34,6 +42,16 @@ _BACKOFF_BASE_SECONDS = 1.0
 # The registered business number this deployment is allowed to send from.
 # Any mismatch between this and Graph's display_phone_number aborts the send.
 EXPECTED_DISPLAY_NUMBER = "+91 70269 49566"
+
+# Graph API error codes that indicate a genuine auth/config failure.
+# These abort the send. All other 400s from the verification call are
+# treated as non-fatal diagnostic failures (log + continue).
+_FATAL_VERIFICATION_ERROR_CODES = {
+    190,   # Invalid / expired access token
+    200,   # Permissions error
+    10,    # Application does not have permission
+    803,   # Invalid object / Phone Number ID not found
+}
 
 
 class WhatsAppError(Exception):
@@ -87,14 +105,26 @@ async def verify_phone_number(client: httpx.AsyncClient,
     """GET /{phone_number_id} -- confirms the ID resolves to the expected
     registered business number before any media is uploaded.
 
-    Returns the full Graph response dict.
-    Raises PhoneNumberMismatchError if display_phone_number does not match.
-    Raises WhatsAppError on API/network failure.
+    Supported fields queried:
+        id, display_phone_number, verified_name, quality_rating, status
+
+    NOTE: 'whatsapp_business_account_id' is intentionally excluded --
+    it is not accessible on the PhoneNumber node via a Cloud API token
+    and causes HTTP 400 error.code=100. If you need the WABA ID, retrieve
+    it via the Business Management API with a System User token.
+
+    Abort behaviour:
+        - PhoneNumberMismatchError  if display_phone_number != EXPECTED_DISPLAY_NUMBER
+        - WhatsAppError             on fatal auth/config errors (codes 190, 200, 10, 803)
+        - Non-fatal 400s (e.g. unsupported field requests) are logged as
+          WARNING and the send continues.
+
+    Returns the full Graph response dict (may be partial on non-fatal errors).
     """
     endpoint = f"{GRAPH_BASE}/{phone_number_id}"
+    # Only request fields confirmed as supported on the PhoneNumber node.
     params = {
-        "fields": "id,display_phone_number,verified_name,quality_rating,status,"
-                  "whatsapp_business_account_id",
+        "fields": "id,display_phone_number,verified_name,quality_rating,status",
         "access_token": access_token,  # sent as query param, NOT logged
     }
     try:
@@ -103,14 +133,13 @@ async def verify_phone_number(client: httpx.AsyncClient,
         raise WhatsAppError(f"Phone number verification network error: {exc}") from exc
 
     body = response.json() if response.content else {}
+    error = body.get("error") or {}
 
-    # Log without the token -- params logged without access_token value.
-    safe_params = {k: v for k, v in params.items() if k != "access_token"}
     logger.info(
         "[%s] Phone number verification | endpoint=%s | http_status=%s | "
         "id=%s | display_phone_number=%s | verified_name=%s | "
-        "quality_rating=%s | status=%s | whatsapp_business_account_id=%s | "
-        "token_tail=%s | full_body=%s",
+        "quality_rating=%s | status=%s | "
+        "token_tail=%s | error_code=%s | fbtrace_id=%s | full_body=%s",
         request_id,
         endpoint,
         response.status_code,
@@ -119,20 +148,31 @@ async def verify_phone_number(client: httpx.AsyncClient,
         body.get("verified_name"),
         body.get("quality_rating"),
         body.get("status"),
-        body.get("whatsapp_business_account_id"),
         _token_tail(access_token),
+        error.get("code"),
+        error.get("fbtrace_id"),
         json.dumps(body),
     )
 
     if response.status_code >= 400:
-        error = (body.get("error") or {})
-        raise WhatsAppError(
-            f"Phone number ID lookup failed (HTTP {response.status_code}): "
-            f"{error.get('message') or body}"
+        error_code = error.get("code")
+        if error_code in _FATAL_VERIFICATION_ERROR_CODES or response.status_code in (401, 403):
+            # Genuine auth/config problem -- abort the send.
+            raise WhatsAppError(
+                f"Phone number ID lookup failed (HTTP {response.status_code}, "
+                f"error.code={error_code}): {error.get('message') or body}"
+            )
+        # Non-fatal: unsupported field, minor Graph error, etc. -- log and continue.
+        logger.warning(
+            "[%s] Phone number verification returned HTTP %s (non-fatal, "
+            "error.code=%s) -- continuing send. message=%s",
+            request_id, response.status_code, error_code, error.get("message"),
         )
+        return body
 
+    # Verification succeeded -- check for phone number mismatch.
     display = body.get("display_phone_number") or ""
-    if _normalise_phone(display) != _normalise_phone(EXPECTED_DISPLAY_NUMBER):
+    if display and _normalise_phone(display) != _normalise_phone(EXPECTED_DISPLAY_NUMBER):
         raise PhoneNumberMismatchError(
             f"Phone number mismatch: Graph API returned '{display}' for "
             f"WHATSAPP_PHONE_NUMBER_ID={phone_number_id!r} but the registered "
@@ -178,7 +218,7 @@ async def send_media_album(
 
     Steps:
       0. Config guard -- fail fast if any required env var is missing.
-      1. Pre-send phone number verification -- abort on mismatch.
+      1. Pre-send phone number verification -- abort on mismatch or fatal error.
       2. Upload each file, logging full request/response.
       3. Send each message, logging full request/response.
       4. Validate success by checking messages[0].id in Graph response.
