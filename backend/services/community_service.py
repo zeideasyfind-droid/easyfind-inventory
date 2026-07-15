@@ -223,4 +223,4 @@ def classify_community(place: dict | None, owner_hint: dict | None = None) -> di
         }
 
     # ── Priority 4: Unknown — no data at all ─────────────────────────────────
-    return {"community": None, "society": None, "landmark": None, "location": None}
+    return {"community": "Unknown", "society": None, "landmark": None, "location": None}

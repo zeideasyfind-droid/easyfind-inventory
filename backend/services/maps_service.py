@@ -277,8 +277,8 @@ def _classify_place(place: dict) -> str:
     if place.get("source") == "nearby":
         return "Standalone"
 
-    types = set(place.get("types") or [])
-    name  = (place.get("name") or "").lower()
+    types = {str(t).strip().lower() for t in (place.get("types") or []) if t}
+    name  = str(place.get("name") or "").lower()
 
     # Rule 2a: Hard Gated signals from Google types.
     if types & _GATED_TYPES:
@@ -366,13 +366,41 @@ async def enrich_from_maps_url(
                 place.get("address_components") or []
             )
 
+            def _safe_str(v):
+                return str(v).strip() if v is not None else None
+
+            def _safe_types(v):
+                out = []
+                for item in (v or []):
+                    if item is None:
+                        continue
+                    s = str(item).strip().lower()
+                    if s:
+                        out.append(s)
+                return out
+
+            def _safe_components(v):
+                return [x for x in (v or []) if isinstance(x, dict)]
+
+            safe_place = {
+                "source": _safe_str(place.get("source")) or "hint",
+                "name": _safe_str(place.get("name")),
+                "types": _safe_types(place.get("types")),
+                "address_components": _safe_components(place.get("address_components")),
+                "location": place.get("location"),
+            }
+            try:
+                community = _classify_place(safe_place)
+            except Exception:
+                community = "Semi Gated"
+
             return {
-                "source"            : place["source"],
-                "name"              : place.get("name"),
-                "types"             : place.get("types") or [],
-                "community"         : _classify_place(place),
+                "source"            : safe_place["source"],
+                "name"              : safe_place.get("name"),
+                "types"             : safe_place.get("types") or [],
+                "community"         : community or "Unknown",
                 "locality"          : locality,
-                "address_components": place.get("address_components") or [],
+                "address_components": safe_place.get("address_components") or [],
             }
 
     except httpx.HTTPError:

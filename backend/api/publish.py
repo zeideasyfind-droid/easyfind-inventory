@@ -125,7 +125,7 @@ async def publish_preview(
     return PublishPreviewResponse(
         success=True,
         preview=listing,
-        community=community_info.get("community", "Unknown"),
+        community=community_info.get("community") or "Unknown",
         society=community_info.get("society"),
         landmark=community_info.get("landmark"),
         maps_url=parsed.get("maps_url"),
