@@ -22,7 +22,12 @@ from backend.models.publish import (
 )
 from backend.services import community_service, formatter_service, maps_service, parser_service
 from backend.services.validation_service import ValidationError, validate_publish_request
-from backend.services.whatsapp_service import GRAPH_BASE, WhatsAppError, send_media_album
+from backend.services.whatsapp_service import (
+    GRAPH_BASE,
+    PhoneNumberMismatchError,
+    WhatsAppError,
+    send_media_album,
+)
 from backend.utils import generate_request_id, mask_phone
 
 router = APIRouter(prefix="/publish")
@@ -69,10 +74,6 @@ async def _run_pipeline(owner_message: str, images: List[UploadFile]):
     place = None
     maps_url = parsed.get("maps_url")
     if maps_url:
-        # A Maps lookup failure must never break the publish flow -- fall
-        # back to whatever the owner's own message already said (parsed
-        # owner_community/owner_society) and keep the original URL, per
-        # 14_ERROR_HANDLING.md / 08_GOOGLE_MAPS_ENRICHMENT.md.
         try:
             place = await maps_service.enrich_from_maps_url(maps_url, parsed.get("maps_place_hint"))
         except Exception:
@@ -118,14 +119,26 @@ async def publish_send(
     media_payloads = []
     for image in images:
         content = await image.read()
-        media_payloads.append((image.filename or "media", content, image.content_type or "application/octet-stream"))
+        media_payloads.append((
+            image.filename or "media",
+            content,
+            image.content_type or "application/octet-stream",
+        ))
 
     try:
-        result = await send_media_album(media_payloads, listing)
+        result = await send_media_album(media_payloads, listing, request_id=request_id)
+    except PhoneNumberMismatchError as exc:
+        # Mismatch is a configuration error, not a transient failure.
+        # Return the formatted caption so it is not lost.
+        return PublishSendResponse(
+            success=False,
+            image_count=len(media_payloads),
+            delivery="aborted",
+            preview=listing,
+            error=str(exc),
+            request_id=request_id,
+        )
     except WhatsAppError as exc:
-        # Never lose the generated caption on a delivery failure -- return
-        # it so the broker can copy it manually and retry without having
-        # to reformat, per 11_WHATSAPP_DELIVERY_ENGINE.md / 14_ERROR_HANDLING.md.
         return PublishSendResponse(
             success=False,
             image_count=len(media_payloads),
