@@ -3,7 +3,7 @@
 Hard requirements from the integration spec:
 - Never create a new worksheet. Always use the existing worksheet named
   WORKSHEET_NAME. If it doesn't exist, raise an error.
-- Columns A-W have a fixed mapping (see COLUMNS below).
+- Columns A-X have a fixed mapping (see COLUMNS below).
 - Upsert semantics: if a row with the same Listing URL (column W) already
   exists, update it in place instead of appending a duplicate.
 """
@@ -18,7 +18,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 WORKSHEET_NAME = "April 2026 - March 2027"
 
-# Column order = A..W, exactly as specified in the integration doc.
+# Column order = A..X, with Property ID added in column X.
 COLUMNS = [
     "date",                 # A
     "onboarding_status",    # B
@@ -43,6 +43,7 @@ COLUMNS = [
     "visit_timings",        # U
     "portal",               # V
     "url",                  # W
+    "property_id",          # X
 ]
 
 URL_COLUMN_INDEX = COLUMNS.index("url")  # W
@@ -99,7 +100,7 @@ def get_existing_rows() -> list:
         .values()
         .get(
             spreadsheetId=settings.GOOGLE_SHEET_ID,
-            range=f"'{WORKSHEET_NAME}'!A2:W",
+            range=f"'{WORKSHEET_NAME}'!A2:X",
         )
         .execute()
     )
@@ -119,7 +120,7 @@ def _dict_to_values(property_dict: dict) -> list:
 
 
 def _next_empty_row_number(service) -> int:
-    """Find the row right after the last row that has any data in A:W.
+    """Find the row right after the last row that has any data in A:X.
 
     Deliberately avoids values().append() — with a fixed target range and
     an explicit row/column write via values().update(), there is no
@@ -131,7 +132,7 @@ def _next_empty_row_number(service) -> int:
     result = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=settings.GOOGLE_SHEET_ID, range=f"'{WORKSHEET_NAME}'!A1:W")
+        .get(spreadsheetId=settings.GOOGLE_SHEET_ID, range=f"'{WORKSHEET_NAME}'!A1:X")
         .execute()
     )
     rows = result.get("values", [])
@@ -147,7 +148,7 @@ def append_row(property_dict: dict) -> int:
     values = _dict_to_values(property_dict)
     service.spreadsheets().values().update(
         spreadsheetId=settings.GOOGLE_SHEET_ID,
-        range=f"'{WORKSHEET_NAME}'!A{row_number}:W{row_number}",
+        range=f"'{WORKSHEET_NAME}'!A{row_number}:X{row_number}",
         valueInputOption="RAW",
         body={"values": [values]},
     ).execute()
@@ -155,14 +156,14 @@ def append_row(property_dict: dict) -> int:
 
 
 def update_row(row_number: int, property_dict: dict) -> int:
-    """Overwrite an existing row (A:W) in place. Returns the row number."""
+    """Overwrite an existing row (A:X) in place. Returns the row number."""
     service = _get_service()
     _require_worksheet_exists(service)
 
     values = _dict_to_values(property_dict)
     service.spreadsheets().values().update(
         spreadsheetId=settings.GOOGLE_SHEET_ID,
-        range=f"'{WORKSHEET_NAME}'!A{row_number}:W{row_number}",
+        range=f"'{WORKSHEET_NAME}'!A{row_number}:X{row_number}",
         valueInputOption="RAW",
         body={"values": [values]},
     ).execute()
@@ -172,7 +173,7 @@ def update_row(row_number: int, property_dict: dict) -> int:
 # Columns the automation must never overwrite once a row already exists —
 # these are set/managed by brokers, not derived from any extracted value,
 # so there's no real data or instruction backing an automated overwrite.
-_NEVER_OVERWRITE_ON_UPDATE = {"onboarding_status"}
+_NEVER_OVERWRITE_ON_UPDATE = {"onboarding_status", "property_id"}
 
 
 def _merge_for_update(matched_row: dict, property_dict: dict) -> dict:

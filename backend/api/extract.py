@@ -12,36 +12,21 @@ router = APIRouter()
 
 @router.post("/extract")
 async def extract(payload: ExtractRequest):
-    # The exact string the user pasted is the canonical URL end-to-end:
-    # it is what gets written to Google Sheets (column W), never a
-    # redirect/auth/intermediate/Firecrawl-resolved URL a portal like
-    # MyGate might send the scraper through.
     url = (payload.url or "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="A property URL is required.")
 
-    # 1. Firecrawl scrapes the page and its built-in LLM returns structured
-    # JSON, plus the raw markdown/html for the contact-number rescue below.
     try:
         scrape_result = await firecrawl.extract_property(url)
     except FirecrawlError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     raw = scrape_result["fields"]
-
-    # 2. Normalize the extracted fields into the exact sheet column values.
-    # If contact_number comes back masked or missing, it's left blank here
-    # (normalize_property -> _clean_str) rather than chased down elsewhere
-    # on the page -- that's filled in manually, not scraped for.
     normalized = normalize_property(raw)
     normalized["url"] = url
     normalized["portal"] = detect_portal(url)
-    normalized["property_id"] = generate_property_id()
     normalized["extracted_at"] = utc_now_iso()
 
-    # 3. Check whether this listing already has a row (by URL, else by
-    # Contact Number + Society Name + Rent) so we upsert instead of
-    # creating a duplicate.
     try:
         existing_rows = google_sheets.get_existing_rows()
     except GoogleSheetsError as exc:
@@ -49,10 +34,31 @@ async def extract(payload: ExtractRequest):
 
     matched_row = duplicate_checker.find_matching_row(normalized, existing_rows)
 
-    # 4. Archive the JSON before writing to Sheets (never skipped).
-    google_drive.archive_property(normalized)
+    property_id = (
+        matched_row.get("property_id")
+        if matched_row and matched_row.get("property_id")
+        else generate_property_id()
+    )
+    normalized["property_id"] = property_id
 
-    # 5. Insert or update the inventory row in Google Sheets.
+    archive_metadata = {
+        "property_id": property_id,
+        "original_url": url,
+        "portal": normalized["portal"],
+        "extraction_timestamp_utc": normalized["extracted_at"],
+        "archive_timestamp_utc": utc_now_iso(),
+        "firecrawl_model_or_version": firecrawl.extract_firecrawl_model(scrape_result),
+        "application_version": google_drive.detect_application_version(),
+    }
+
+    google_drive.archive_property(
+        property_id=property_id,
+        normalized=normalized,
+        firecrawl_response=scrape_result["raw_response"],
+        markdown=scrape_result.get("markdown", ""),
+        metadata=archive_metadata,
+    )
+
     try:
         sheet_row, action = google_sheets.upsert_row(normalized, matched_row)
     except GoogleSheetsError as exc:
@@ -61,6 +67,6 @@ async def extract(payload: ExtractRequest):
     return {
         "status": "success",
         "action": action,
-        "property_id": normalized["property_id"],
+        "property_id": property_id,
         "sheet_row": sheet_row,
     }

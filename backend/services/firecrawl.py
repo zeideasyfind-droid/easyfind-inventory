@@ -1,7 +1,6 @@
 """Calls the Firecrawl API to scrape a listing URL and use its built-in
 LLM extraction to convert the raw page into structured JSON in one call.
 """
-import os
 from pathlib import Path
 
 import httpx
@@ -55,6 +54,26 @@ def _load_prompt() -> str:
     return text
 
 
+def extract_firecrawl_model(scrape_result: dict) -> str | None:
+    raw_response = scrape_result.get("raw_response") or {}
+    data = raw_response.get("data") or {}
+    metadata = data.get("metadata") or {}
+    for key in (
+        "model",
+        "modelVersion",
+        "model_version",
+        "extractModel",
+        "extract_model",
+        "llmModel",
+        "llm_model",
+        "version",
+    ):
+        value = metadata.get(key) or data.get(key) or raw_response.get(key)
+        if value:
+            return str(value)
+    return None
+
+
 async def extract_property(url: str) -> dict:
     """Scrape `url` with Firecrawl and return the extracted JSON dict."""
     api_key = settings.FIRECRAWL_API_KEY
@@ -65,13 +84,7 @@ async def extract_property(url: str) -> dict:
 
     payload = {
         "url": url,
-        # Only the schema-based JSON extraction is requested. A prior
-        # revision also pulled markdown/html/rawHtml to hunt for contact
-        # numbers the LLM extraction masked or missed, but that costs
-        # extra Firecrawl credits per scrape for little benefit -- if a
-        # number is masked/unavailable, it's left blank and filled in
-        # manually instead.
-        "formats": ["json"],
+        "formats": ["json", "markdown"],
         "onlyMainContent": True,
         "jsonOptions": {
             "prompt": prompt,
@@ -100,4 +113,8 @@ async def extract_property(url: str) -> dict:
     if not extracted:
         raise FirecrawlError("Firecrawl response did not include extracted JSON.")
 
-    return {"fields": extracted}
+    return {
+        "fields": extracted,
+        "markdown": data.get("markdown") or "",
+        "raw_response": body,
+    }
