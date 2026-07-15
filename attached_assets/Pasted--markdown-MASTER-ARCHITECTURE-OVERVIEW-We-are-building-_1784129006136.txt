@@ -1,0 +1,61 @@
+```markdown
+### MASTER ARCHITECTURE & OVERVIEW
+We are building the automated production backend for "Easy Find Property Solution"—a modern, automated system that crawls residential rental listings, transforms data cleanly, crops/optimizes imagery, dynamically syncs active listings to our target Meta/WhatsApp Commerce Catalog, and deploys as a containerized service on Google Cloud Run.
+
+- **Target Repository:** https://github.com/zeideasyfind-droid/easyfind-inventory
+- **Target Git Commit:** `1d220c4638250f0c7e34399ebb05c4437f1c612f`
+
+### INITIALIZATION REQUIREMENT (SYNC WORKSPACE)
+1. Before writing any new features, inspect the current workspace and pull/align the state perfectly with the latest commit `1d220c4638250f0c7e34399ebb05c4437f1c612f` from the repository.
+2. Analyze the current project layout (detecting if it is a Python or Node.js environment based on standard package manifests) to determine the exact folder structure where utility scripts, API route handlers, or workers belong.
+
+---
+
+### FINAL PRODUCTION DIRECTIVE: END-TO-END META CATALOG, IMAGE SYNC, & CLOUD RUN INFRASTRUCTURE
+
+Implement a bulletproof data pipeline that catches newly updated/crawled rental items from our database/Google Sheet tracking infrastructure, transforms them, and updates the Meta Product Catalog.
+
+#### 1. STRICT ENVIRONMENT MAPPING (Verified Secrets)
+The application must securely inject the following variables exactly as named in our workspace environment:
+- `WHATSAPP_TOKEN` (System User Access Token with full Catalog/WhatsApp permissions)
+- `PHONE_NUMBER_ID` (WhatsApp Business Phone ID)
+- `META_CATALOG_ID` (Use explicit value: `2732462966455115`)
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
+- `DATABASE_URL` / `GOOGLE_SHEET_ID` (For scanning existing source rows)
+
+#### 2. CLOUD RUN ENVIRONMENT CONFIGURATION REQUIREMENT
+1. **Analyze Deployment Files:** Inspect the repository for any Dockerfile, Cloud Build configs (`cloudbuild.yaml`), or deployment configuration scripts used to push this service to **Google Cloud Run**.
+2. **Infrastructure Environment Mapping:** Ensure that the application is architected to read these runtime credentials strictly from process environment variables. Update any container configuration templates or deployment steps to explicitly expect and map these exact keys.
+3. **User Action Checklist:** Once you have analyzed the deployment setup, generate a clear, exact checklist response for the user detailing precisely which environment variables must be populated within their Google Cloud Console / Cloud Run service settings to ensure the container successfully executes in production.
+
+#### 3. STEP 1: CLOUDINARY MEDIA LAYER
+When a listing is processed or its raw media is caught by our workers:
+- Intercept the raw or crawled listing image URL.
+- Upload it programmatically to Cloudinary using the `CLOUDINARY_*` credentials.
+- Apply a rigorous server-side transformation rule: Crop and resize the property image to exactly **1080x1080** using fill/limit specifications. This ensures the rental images render beautifully inside WhatsApp UI frameworks without distortion.
+- Extract the secure, optimized public Cloudinary URL string to feed downstream tasks.
+
+#### 4. STEP 2: META COMMERCE GRAPH API SYNC
+Implement a network handler pushing the payload directly via:
+`POST https://graph.facebook.com/v18.0/2732462966455115/batch`
+
+The generated product entity array must map to Meta’s Real Estate/Retail spec constraints:
+- `id`: Unique alpha-numeric string matching the specific source listing ID.
+- `title`: Property headline (e.g., "2 BHK Apartment in Indiranagar").
+- `description`: Clean, high-conversion presentation text. Ensure it retains realistic, original, non-overly-artificial verbiage.
+- `image_link`: The newly generated, 1080x1080 Cloudinary public URL string.
+- `link`: Direct destination listing details anchor page URL.
+- `price`: Numeric valuation value (Integer/Decimal).
+- `currency`: Must default explicitly to `INR`.
+- `availability`: Must evaluate cleanly to `in stock` (or `out of stock` if marked rented).
+- `condition`: Explicitly default to `new`.
+
+#### 5. STEP 3: PIPELINE HYGIENE & INDEMPOTENCY
+- **Upsert Capability:** Structure the Graph API JSON packet to handle updates seamlessly. Pushing an existing `id` must execute an overwrite change rather than generating duplicate items.
+- **Robustness:** Trap authorization failures, HTTP rate-limiting codes (429), or empty asset payload array bugs safely. Log transaction reference tokens for full backend audit trailing.
+
+Review the repository architecture, build the integration cleanly without placeholder logic, map the environment variables for Cloud Run portability, and execute.
+
+```

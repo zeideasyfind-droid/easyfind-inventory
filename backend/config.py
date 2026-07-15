@@ -20,7 +20,8 @@ class Settings:
 
     @property
     def GOOGLE_SERVICE_ACCOUNT_JSON(self) -> str:
-        return os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+        # Accept both names — GOOGLE_SERVICE_ACCOUNT is the Replit secret name
+        return os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON") or os.environ.get("GOOGLE_SERVICE_ACCOUNT", "")
 
     @property
     def GOOGLE_DRIVE_FOLDER_ID(self) -> str:
@@ -36,13 +37,34 @@ class Settings:
     def GOOGLE_MAPS_API_KEY(self) -> str:
         return os.environ.get("GOOGLE_MAPS_API_KEY", "")
 
+    # --- Module 3: Meta Commerce Catalog + Cloudinary ---
+
+    @property
+    def META_CATALOG_ID(self) -> str:
+        # Explicit production catalog ID; can be overridden via env var.
+        return os.environ.get("META_CATALOG_ID", "2732462966455115")
+
+    @property
+    def CLOUDINARY_CLOUD_NAME(self) -> str:
+        return os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+
+    @property
+    def CLOUDINARY_API_KEY(self) -> str:
+        return os.environ.get("CLOUDINARY_API_KEY", "")
+
+    @property
+    def CLOUDINARY_API_SECRET(self) -> str:
+        return os.environ.get("CLOUDINARY_API_SECRET", "")
+
     @property
     def WHATSAPP_ACCESS_TOKEN(self) -> str:
-        return os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
+        # Accept both names — WHATSAPP_TOKEN is the Replit secret name
+        return os.environ.get("WHATSAPP_ACCESS_TOKEN") or os.environ.get("WHATSAPP_TOKEN", "")
 
     @property
     def WHATSAPP_PHONE_NUMBER_ID(self) -> str:
-        return os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+        # Accept both names — PHONE_NUMBER_ID is the Replit secret name
+        return os.environ.get("WHATSAPP_PHONE_NUMBER_ID") or os.environ.get("PHONE_NUMBER_ID", "")
 
     @property
     def WHATSAPP_RECIPIENT_NUMBER(self) -> str:

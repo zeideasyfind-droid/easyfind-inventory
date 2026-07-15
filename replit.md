@@ -48,7 +48,7 @@ the target row explicitly and write with `update()` instead.
 The `Start application` workflow runs:
 
 ```
-uvicorn backend.main:app --host 0.0.0.0 --port 5000 --reload
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 5000 --reload
 ```
 
 Cloud Run / Docker instead uses `PORT` (default 8080), per the
@@ -217,6 +217,59 @@ reference for Module 2's WhatsApp layer. What was reused vs. not, and why:
   attempt, log-and-return-null on failure) — there was nothing to migrate
   for either. Both were built fresh for Module 2 instead (video support
   above; exponential-backoff retries in `whatsapp_service._with_retries`).
+
+## Module 3 — Meta Commerce Catalog + Cloudinary (2026-07-15)
+
+Automated pipeline that syncs every extracted listing to the Meta WhatsApp
+Commerce Catalog (`META_CATALOG_ID = 2732462966455115`).
+
+**Pipeline (triggered automatically after every `/extract` call):**
+1. `cloudinary_service.extract_og_image()` — pulls the OG/Twitter card image
+   from the Firecrawl metadata (`data.metadata.ogImage` etc.)
+2. `cloudinary_service.upload_and_transform()` — uploads to Cloudinary, applies
+   `c_fill,w_1080,h_1080`, returns a secure 1080×1080 URL.
+3. `meta_catalog_service.upsert_item()` — posts to
+   `POST /v18.0/{catalog_id}/batch` with `method=UPDATE` (upsert semantics;
+   existing `retailer_id` → overwrite, never duplicate).
+
+The background task (`_sync_to_catalog` in `backend/api/extract.py`) never
+blocks or rolls back a successful sheet write — Cloudinary/Meta failures are
+logged as warnings only.
+
+**Manual endpoints (for bulk/scheduled sync):**
+- `POST /catalog/sync`       — body `{"property_id": "..."}`, syncs one row from sheet
+- `POST /catalog/sync-all`   — syncs every row in the sheet (no images, sheet rows only)
+
+**New secrets required:**
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+- `META_CATALOG_ID` — defaults to `2732462966455115` if not set
+- `WHATSAPP_TOKEN` — must carry `catalog_management` permission (same token as Module 2)
+
+**Relevant files:**
+- `backend/services/cloudinary_service.py` — Cloudinary upload + OG image extraction
+- `backend/services/meta_catalog_service.py` — Meta Graph API batch upsert
+- `backend/api/catalog.py` — manual sync routes
+
+## Cloud Run deployment (cloudbuild.yaml)
+
+`cloudbuild.yaml` now has full build + deploy steps targeting Cloud Run in
+`asia-south1`. All 12 runtime secrets are passed via `--set-env-vars`.
+
+**Cloud Run environment variables to set in Google Cloud Console:**
+| Variable | Source |
+|---|---|
+| `FIRECRAWL_API_KEY` | firecrawl.dev |
+| `GOOGLE_SHEET_ID` | target spreadsheet ID |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | full service-account JSON key |
+| `GOOGLE_DRIVE_FOLDER_ID` | Drive archive folder (optional) |
+| `GOOGLE_MAPS_API_KEY` | Google Places API key |
+| `WHATSAPP_TOKEN` | Meta System User access token |
+| `PHONE_NUMBER_ID` | WhatsApp Business phone number ID |
+| `WHATSAPP_RECIPIENT_NUMBER` | EasyFind business WhatsApp number |
+| `META_CATALOG_ID` | `2732462966455115` (or override) |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary dashboard |
+| `CLOUDINARY_API_KEY` | Cloudinary dashboard |
+| `CLOUDINARY_API_SECRET` | Cloudinary dashboard |
 
 ## Setup status
 
