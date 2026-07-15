@@ -110,14 +110,13 @@ def build_catalog_item(
     price_paise = int(float(rent) * 100) if rent else 0
 
     item: dict[str, Any] = {
-        "id": property_id,
-        "title": _build_title(normalized),
+        "name": _build_title(normalized),
         "description": _build_description(normalized),
         "availability": "in stock",
         "condition": "new",
         "price": price_paise,
         "currency": "INR",
-        "link": listing_url,
+        "url": listing_url,
     }
     if image_url:
         item["image_link"] = image_url
