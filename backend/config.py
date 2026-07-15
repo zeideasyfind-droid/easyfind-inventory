@@ -30,5 +30,23 @@ class Settings:
     def PORT(self) -> int:
         return int(os.environ.get("PORT", "8080"))
 
+    # --- Module 2: Property Publishing Engine ---
+
+    @property
+    def GOOGLE_MAPS_API_KEY(self) -> str:
+        return os.environ.get("GOOGLE_MAPS_API_KEY", "")
+
+    @property
+    def WHATSAPP_ACCESS_TOKEN(self) -> str:
+        return os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
+
+    @property
+    def WHATSAPP_PHONE_NUMBER_ID(self) -> str:
+        return os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+
+    @property
+    def WHATSAPP_RECIPIENT_NUMBER(self) -> str:
+        return os.environ.get("WHATSAPP_RECIPIENT_NUMBER", "")
+
 
 settings = Settings()

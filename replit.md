@@ -65,9 +65,17 @@ Set these as Replit Secrets before extraction will fully work:
   Drive folder) must be shared with the service account's email
 - `GOOGLE_DRIVE_FOLDER_ID` — optional; if unset, JSON archives are saved
   to local disk instead of Drive
+- `GOOGLE_MAPS_API_KEY` — Module 2 only; Google Places enrichment
+- `WHATSAPP_ACCESS_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` — Module 2 only;
+  WhatsApp Cloud API (Meta) credentials for the sending account
+- `WHATSAPP_RECIPIENT_NUMBER` — Module 2 only; the configured EasyFind
+  Business WhatsApp number that generated listings are delivered to
+  (international format, e.g. `91XXXXXXXXXX`)
 
 Without these, `/health` and the frontend still work, but `/extract`
-returns a clear error explaining which variable is missing.
+returns a clear error explaining which variable is missing, and
+`/publish/send` returns `success: false` with the formatted caption
+still attached if the Module 2 secrets aren't set.
 
 ## API
 
@@ -76,6 +84,10 @@ returns a clear error explaining which variable is missing.
 - `POST /extract` — `{"url": "..."}` → `{"status": "success", "action": "inserted"|"updated", "property_id": "...", "sheet_row": N}`
   (upserts by Listing URL, or by Contact Number + Society Name + Rent if no URL match)
 - `GET /inventory` — dumps current sheet rows (added for convenience, not in original spec)
+- `POST /publish/preview` — multipart `owner_message` + `images[]` →
+  `{"success": true, "preview": "...", "community": "...", "society"|"landmark": "..."}`
+- `POST /publish/send` — same request shape → delivers the WhatsApp media
+  album, `{"success": true, "message_id": "...", "image_count": N, "delivery": "sent"}`
 
 ## Project structure
 
@@ -83,7 +95,7 @@ Existing repo layout (`frontend/`, `backend/`, `prompts/`, `Dockerfile`,
 `cloudbuild.yaml`, `requirements.txt`) was preserved as-is per the
 implementation spec — no reorganizing.
 
-## Multi-portal support & contact rescue (2026-07-14)
+## Multi-portal support (2026-07-14)
 
 - **Portal detection:** `backend/utils.py::detect_portal(url)` maps a
   listing URL's domain to its portal name (MyGate, 99acres, MagicBricks,
@@ -91,18 +103,62 @@ implementation spec — no reorganizing.
   from this instead of the old hardcoded `"Housing.com"`. Homepage copy
   (`frontend/index.html`) now mentions all 7 portals with a generic
   "Paste a property URL..." placeholder.
-- **Contact number rescue:** Firecrawl is now asked for `markdown`,
-  `html`, and `rawHtml` in addition to `json` (the extraction schema
-  itself is unchanged). `backend/services/contact_extractor.py` searches
-  all of them for a complete, unmasked Indian mobile number and uses it
-  if found; masked/partial numbers never match (they contain non-digit
-  placeholder characters) and are never inferred or reconstructed. If
-  nothing valid is found, the contact field is left empty.
-- **Column B / URL preservation:** already correct before this change —
-  `_NEVER_OVERWRITE_ON_UPDATE` in `google_sheets.py` protects
-  `onboarding_status` (column B) on every update, and `extract.py` always
-  writes the exact pasted `url` (never a Firecrawl-resolved/redirect
-  URL) to column W. Verified, not modified.
+- **Column B / URL preservation:** `_NEVER_OVERWRITE_ON_UPDATE` in
+  `google_sheets.py` protects `onboarding_status` (column B) on every
+  update, and `extract.py` always writes the exact pasted `url` (never a
+  Firecrawl-resolved/redirect URL) to column W.
+- **Column B on new rows:** `normalizer.py::normalize_property()` leaves
+  `onboarding_status` as `None` (blank) for brand-new rows too — it's a
+  manually-maintained broker field and the automation never writes a
+  default value into it.
+- **Contact number:** comes only from Firecrawl's direct JSON extraction
+  (`formats: ["json"]`). A markdown/html/rawHtml "rescue" pass that
+  chased masked/missing numbers elsewhere on the page was tried and then
+  removed — it cost extra Firecrawl credits per scrape for numbers that
+  are usually masked by design; masked/missing numbers are now simply
+  left blank for manual entry.
+
+## Module 2 — Property Publishing Engine (2026-07-15)
+
+Independent from Module 1 (Inventory Engine above); implemented from a
+20-document spec bundle (`00_README.md` .. `19_REPLIT_IMPLEMENTATION_CHECKLIST.md`).
+Converts a pasted owner message + uploaded photos into one EasyFind-formatted
+WhatsApp media album.
+
+**Pipeline** (`backend/api/publish.py`): raw owner message → `parser_service`
+(regex-only, deterministic, never invents a value) → `maps_service` (resolves
+the Maps URL found in the message, including shortened `maps.app.goo.gl`
+links, then queries Google Places) → `community_service` (classifies
+Gated / Semi-Gated / Standalone / Unknown) → `formatter_service` (builds the
+fixed-template caption, Indian ₹ digit grouping) → `whatsapp_service`
+(uploads each image to WhatsApp Cloud API, sends one image message per
+photo in original order, caption attached to the first only).
+
+- **Gated vs. Semi-Gated vs. Standalone:** only a Maps pin with an explicit
+  place name (a society/building) can produce Gated/Semi-Gated;
+  `community_service._GATED_KEYWORDS` is the configurable rule set for
+  telling a large township apart from a single building — update that list
+  as EasyFind's own conventions evolve. A raw pin with no name, or a Maps
+  lookup failure, always falls back to Standalone/Unknown with just a
+  nearby public landmark — the exact address is never exposed.
+- **Failure handling:** a Google Maps failure never blocks formatting
+  (falls back to `Community: Unknown`, keeps the original Maps URL). A
+  WhatsApp send failure returns `success: false` with the *already
+  generated* caption text still attached, so nothing has to be
+  reformatted to retry.
+- **Endpoints:** `POST /publish/preview` and `POST /publish/send`
+  (multipart: `owner_message` + `images[]`). Neither the browser nor any
+  frontend code ever calls Google Maps or WhatsApp directly — all
+  credentials stay server-side (`backend/config.py`).
+- **Frontend:** a second card below the Inventory Engine
+  (`frontend/publish.js` / `#publish-card` in `index.html`) — textarea for
+  the owner message, drag-and-drop image uploader, preview panel, then a
+  Send button.
+- **Secrets:** `GOOGLE_MAPS_API_KEY`, `WHATSAPP_ACCESS_TOKEN`,
+  `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_RECIPIENT_NUMBER` (see below).
+- **Storage:** intentionally stateless — uploaded images live only for the
+  duration of the request; nothing from Module 2 is written to Module 1's
+  Google Sheet or Drive archive.
 
 ## Setup status
 

@@ -50,6 +50,46 @@
     </div>
   </main>
 
+  <main class="card" id="publish-card">
+    <h1>EasyFind Property Publishing</h1>
+    <p class="subtitle">Paste the complete owner message (Google Maps link included) and drop the listing photos. EasyFind formats the listing and sends one WhatsApp media album with one caption.</p>
+
+    <form id="publish-form">
+      <label for="owner-message">Owner message</label>
+      <textarea
+        id="owner-message"
+        name="owner_message"
+        rows="8"
+        placeholder="Paste the full owner message here, including the Google Maps link if shared..."
+        required
+      ></textarea>
+
+      <label for="image-input">Property photos</label>
+      <div id="dropzone" class="dropzone">
+        <p>Drag &amp; drop images here, or click to browse</p>
+        <input id="image-input" name="images" type="file" accept="image/*" multiple hidden />
+      </div>
+      <div id="image-list" class="image-list"></div>
+
+      <button id="preview-btn" type="submit">Generate Preview</button>
+    </form>
+
+    <div id="publish-state" class="publish-state hidden"></div>
+
+    <div id="preview-panel" class="preview-panel hidden">
+      <h2>Preview</h2>
+      <pre id="preview-text"></pre>
+      <p id="preview-meta" class="subtitle"></p>
+      <div class="preview-actions">
+        <button type="button" id="send-btn">Send to WhatsApp</button>
+        <button type="button" id="edit-btn" class="secondary">Edit</button>
+      </div>
+    </div>
+
+    <div id="publish-result" class="publish-state hidden"></div>
+  </main>
+
   <script src="/static/app.js"></script>
+  <script src="/static/publish.js"></script>
 </body>
 </html>

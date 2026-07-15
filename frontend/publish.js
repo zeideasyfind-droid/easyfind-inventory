@@ -1,0 +1,166 @@
+const publishForm = document.getElementById("publish-form");
+const ownerMessageInput = document.getElementById("owner-message");
+const dropzone = document.getElementById("dropzone");
+const imageInput = document.getElementById("image-input");
+const imageList = document.getElementById("image-list");
+const previewBtn = document.getElementById("preview-btn");
+const sendBtn = document.getElementById("send-btn");
+const editBtn = document.getElementById("edit-btn");
+const publishState = document.getElementById("publish-state");
+const previewPanel = document.getElementById("preview-panel");
+const previewText = document.getElementById("preview-text");
+const previewMeta = document.getElementById("preview-meta");
+const publishResult = document.getElementById("publish-result");
+
+let selectedFiles = [];
+
+function renderImageList() {
+  imageList.innerHTML = "";
+  selectedFiles.forEach((file, index) => {
+    const item = document.createElement("span");
+    item.className = "image-chip";
+    item.textContent = file.name;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "\u00d7";
+    remove.addEventListener("click", () => {
+      selectedFiles.splice(index, 1);
+      renderImageList();
+    });
+    item.appendChild(remove);
+    imageList.appendChild(item);
+  });
+}
+
+function addFiles(fileList) {
+  // Preserve original order (11_WHATSAPP_DELIVERY_ENGINE.md).
+  Array.from(fileList).forEach((file) => selectedFiles.push(file));
+  renderImageList();
+}
+
+dropzone.addEventListener("click", () => imageInput.click());
+imageInput.addEventListener("change", () => {
+  addFiles(imageInput.files);
+  imageInput.value = "";
+});
+
+["dragenter", "dragover"].forEach((eventName) => {
+  dropzone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+});
+
+["dragleave", "drop"].forEach((eventName) => {
+  dropzone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropzone.classList.remove("dragover");
+  });
+});
+
+dropzone.addEventListener("drop", (event) => {
+  if (event.dataTransfer && event.dataTransfer.files) {
+    addFiles(event.dataTransfer.files);
+  }
+});
+
+function showPublishState(message, kind) {
+  publishState.textContent = message;
+  publishState.className = `publish-state${kind ? " " + kind : ""}`;
+  publishState.classList.toggle("hidden", !message);
+}
+
+function showResult(message, kind) {
+  publishResult.textContent = message;
+  publishResult.className = `publish-state${kind ? " " + kind : ""}`;
+  publishResult.classList.toggle("hidden", !message);
+}
+
+function buildFormData() {
+  const formData = new FormData();
+  formData.append("owner_message", ownerMessageInput.value);
+  selectedFiles.forEach((file) => formData.append("images", file));
+  return formData;
+}
+
+publishForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  showResult("");
+
+  if (!ownerMessageInput.value.trim()) {
+    showPublishState("Please paste the owner message.", "error");
+    return;
+  }
+  if (selectedFiles.length === 0) {
+    showPublishState("Please add at least one photo.", "error");
+    return;
+  }
+
+  previewBtn.disabled = true;
+  showPublishState("Parsing message and enriching with Google Maps\u2026", "loading");
+  previewPanel.classList.add("hidden");
+
+  try {
+    const response = await fetch("/publish/preview", {
+      method: "POST",
+      body: buildFormData(),
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not generate a preview for this listing.");
+    }
+
+    previewText.textContent = data.preview;
+    const locationLabel = data.society || data.landmark || "not identified";
+    previewMeta.textContent = `Community: ${data.community} \u2014 ${locationLabel}`;
+    previewPanel.classList.remove("hidden");
+    showPublishState("");
+  } catch (err) {
+    showPublishState(err.message, "error");
+  } finally {
+    previewBtn.disabled = false;
+  }
+});
+
+editBtn.addEventListener("click", () => {
+  previewPanel.classList.add("hidden");
+  showResult("");
+});
+
+sendBtn.addEventListener("click", async () => {
+  sendBtn.disabled = true;
+  showResult("Sending media album to WhatsApp\u2026", "loading");
+
+  try {
+    const response = await fetch("/publish/send", {
+      method: "POST",
+      body: buildFormData(),
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not send this listing to WhatsApp.");
+    }
+
+    if (data.success) {
+      showResult(
+        `Sent ${data.image_count} photo${data.image_count === 1 ? "" : "s"} to WhatsApp (message ${data.message_id}).`,
+        "success"
+      );
+      selectedFiles = [];
+      renderImageList();
+      ownerMessageInput.value = "";
+      previewPanel.classList.add("hidden");
+    } else {
+      showResult(
+        `WhatsApp delivery failed: ${data.error || "unknown error"}. The listing text above is unchanged \u2014 you can copy it manually or retry.`,
+        "error"
+      );
+    }
+  } catch (err) {
+    showResult(err.message, "error");
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
