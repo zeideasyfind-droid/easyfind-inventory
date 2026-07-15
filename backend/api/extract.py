@@ -41,6 +41,12 @@ async def extract(payload: ExtractRequest):
     )
     normalized["property_id"] = property_id
 
+    sheet_write_timestamp = utc_now_iso()
+    try:
+        sheet_row, action = google_sheets.upsert_row(normalized, matched_row)
+    except GoogleSheetsError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
     archive_metadata = {
         "property_id": property_id,
         "original_url": url,
@@ -49,20 +55,23 @@ async def extract(payload: ExtractRequest):
         "archive_timestamp_utc": utc_now_iso(),
         "firecrawl_model_or_version": firecrawl.extract_firecrawl_model(scrape_result),
         "application_version": google_drive.detect_application_version(),
+        "archive_status": "completed",
+        "sheet_write_timestamp": sheet_write_timestamp,
+        "archive_timestamp": utc_now_iso(),
     }
 
-    google_drive.archive_property(
-        property_id=property_id,
-        normalized=normalized,
-        firecrawl_response=scrape_result["raw_response"],
-        markdown=scrape_result.get("markdown", ""),
-        metadata=archive_metadata,
-    )
-
     try:
-        sheet_row, action = google_sheets.upsert_row(normalized, matched_row)
-    except GoogleSheetsError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        google_drive.archive_property(
+            property_id=property_id,
+            normalized=normalized,
+            firecrawl_response=scrape_result["raw_response"],
+            markdown=scrape_result.get("markdown", ""),
+            metadata=archive_metadata,
+        )
+    except Exception as exc:
+        archive_metadata["archive_status"] = "archive_failed"
+        archive_metadata["archive_timestamp"] = utc_now_iso()
+        raise HTTPException(status_code=502, detail=f"Archiving failed after sheet write: {exc}") from exc
 
     return {
         "status": "success",

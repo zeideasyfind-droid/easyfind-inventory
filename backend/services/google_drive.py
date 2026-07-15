@@ -1,4 +1,4 @@
-"""Archives every extraction before it is written to Google Sheets.
+"""Archives every extraction after a successful Google Sheets write.
 Uploads to Google Drive when GOOGLE_DRIVE_FOLDER_ID is configured
 (preferred); otherwise archives to local disk under archives/.
 """
@@ -16,6 +16,12 @@ from backend.config import settings
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 ARCHIVE_ROOT = Path(__file__).resolve().parent.parent.parent / "archives"
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_ARCHIVE_FILE_SPECS = {
+    "normalized.json": "application/json",
+    "firecrawl_response.json": "application/json",
+    "markdown.md": "text/markdown",
+    "metadata.json": "application/json",
+}
 
 
 def detect_application_version() -> str | None:
@@ -49,17 +55,19 @@ def _local_archive_dir(property_id: str) -> Path:
     return directory
 
 
+def _serialize_archive_payloads(normalized: dict, firecrawl_response: dict, markdown: str, metadata: dict) -> dict[str, str]:
+    return {
+        "normalized.json": json.dumps(normalized, indent=2, default=str),
+        "firecrawl_response.json": json.dumps(firecrawl_response, indent=2, default=str),
+        "markdown.md": markdown or "",
+        "metadata.json": json.dumps(metadata, indent=2, default=str),
+    }
+
+
 def _write_archive_files(base_path: Path, normalized: dict, firecrawl_response: dict, markdown: str, metadata: dict):
-    (base_path / "normalized.json").write_text(
-        json.dumps(normalized, indent=2, default=str), encoding="utf-8"
-    )
-    (base_path / "firecrawl_response.json").write_text(
-        json.dumps(firecrawl_response, indent=2, default=str), encoding="utf-8"
-    )
-    (base_path / "markdown.md").write_text(markdown or "", encoding="utf-8")
-    (base_path / "metadata.json").write_text(
-        json.dumps(metadata, indent=2, default=str), encoding="utf-8"
-    )
+    payloads = _serialize_archive_payloads(normalized, firecrawl_response, markdown, metadata)
+    for name, body in payloads.items():
+        (base_path / name).write_text(body, encoding="utf-8")
 
 
 def _archive_locally(property_id: str, normalized: dict, firecrawl_response: dict, markdown: str, metadata: dict) -> str:
@@ -102,22 +110,46 @@ def _ensure_drive_folder(service, name: str, parent_id: str) -> str:
     return created["id"]
 
 
-def _upload_text_file(service, folder_id: str, name: str, body: str, mime_type: str):
-    media = MediaIoBaseUpload(io.BytesIO(body.encode("utf-8")), mimetype=mime_type)
-    service.files().create(
-        body={"name": name, "parents": [folder_id]},
-        media_body=media,
-        fields="id",
-    ).execute()
+def _list_drive_files(service, folder_id: str) -> dict[str, str]:
+    query = f"'{folder_id}' in parents and trashed = false"
+    result = service.files().list(q=query, fields="files(id, name)", pageSize=100).execute()
+    files = result.get("files", [])
+    by_name = {}
+    duplicates = {}
+    for item in files:
+        name = item.get('name')
+        file_id = item.get('id')
+        if name in by_name:
+            duplicates.setdefault(name, []).append(file_id)
+        else:
+            by_name[name] = file_id
+    for name, ids in duplicates.items():
+        for dup_id in ids:
+            service.files().delete(fileId=dup_id).execute()
+    return by_name
+
+
+def _upsert_text_file(service, folder_id: str, existing_files: dict[str, str], name: str, body: str, mime_type: str):
+    media = MediaIoBaseUpload(io.BytesIO(body.encode("utf-8")), mimetype=mime_type, resumable=False)
+    existing_id = existing_files.get(name)
+    if existing_id:
+        service.files().update(fileId=existing_id, media_body=media).execute()
+    else:
+        created = service.files().create(
+            body={"name": name, "parents": [folder_id]},
+            media_body=media,
+            fields="id",
+        ).execute()
+        existing_files[name] = created["id"]
 
 
 def _archive_to_drive(property_id: str, normalized: dict, firecrawl_response: dict, markdown: str, metadata: dict) -> str:
     service = _get_drive_service()
     folder_id = _ensure_drive_folder(service, _archive_folder_name(property_id), settings.GOOGLE_DRIVE_FOLDER_ID)
-    _upload_text_file(service, folder_id, "normalized.json", json.dumps(normalized, indent=2, default=str), "application/json")
-    _upload_text_file(service, folder_id, "firecrawl_response.json", json.dumps(firecrawl_response, indent=2, default=str), "application/json")
-    _upload_text_file(service, folder_id, "markdown.md", markdown or "", "text/markdown")
-    _upload_text_file(service, folder_id, "metadata.json", json.dumps(metadata, indent=2, default=str), "application/json")
+    existing_files = _list_drive_files(service, folder_id)
+    payloads = _serialize_archive_payloads(normalized, firecrawl_response, markdown, metadata)
+    for name, body in payloads.items():
+        _upsert_text_file(service, folder_id, existing_files, name, body, _ARCHIVE_FILE_SPECS[name])
     return folder_id
 
 
