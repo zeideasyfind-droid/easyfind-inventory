@@ -13,11 +13,46 @@ const previewPanel = document.getElementById("preview-panel");
 const previewText = document.getElementById("preview-text");
 const previewMeta = document.getElementById("preview-meta");
 const publishResult = document.getElementById("publish-result");
+const statusBanner = document.getElementById("whatsapp-status-banner");
 
 const DEFAULT_PREVIEW_TEXT = "Fill in the owner message and click Generate Preview to see the formatted listing here.";
 
 let selectedFiles = [];
 
+// ---------------------------------------------------------------------------
+// Configuration status banner — fetched once on page load.
+// Tells the operator immediately whether WhatsApp secrets are in place so
+// 'WhatsApp Cloud API is not configured.' is never a surprise at send time.
+// ---------------------------------------------------------------------------
+async function loadWhatsAppStatus() {
+  if (!statusBanner) return;
+  try {
+    const res = await fetch("/publish/status");
+    if (!res.ok) { statusBanner.classList.add("hidden"); return; }
+    const data = await res.json();
+
+    if (data.configured) {
+      statusBanner.textContent = "\u2705 WhatsApp configured";
+      statusBanner.className = "wa-status-banner wa-status-ok";
+    } else {
+      const missing = [];
+      if (!data.access_token.present)    missing.push("WHATSAPP_ACCESS_TOKEN");
+      if (!data.phone_number_id.present) missing.push("WHATSAPP_PHONE_NUMBER_ID");
+      if (!data.recipient_number.present) missing.push("WHATSAPP_RECIPIENT_NUMBER");
+      statusBanner.textContent =
+        "\u274c WhatsApp Cloud API is not configured \u2014 missing in Secrets: " + missing.join(", ");
+      statusBanner.className = "wa-status-banner wa-status-error";
+    }
+  } catch (_) {
+    statusBanner.classList.add("hidden");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", loadWhatsAppStatus);
+
+// ---------------------------------------------------------------------------
+// Media file handling
+// ---------------------------------------------------------------------------
 function renderImageList() {
   imageList.innerHTML = "";
   selectedFiles.forEach((file, index) => {
@@ -87,6 +122,9 @@ dropzone.addEventListener("drop", (event) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// UI helpers
+// ---------------------------------------------------------------------------
 function showPublishState(message, kind) {
   publishState.textContent = message;
   publishState.className = `publish-state${kind ? " " + kind : ""}`;
@@ -106,6 +144,9 @@ function buildFormData() {
   return formData;
 }
 
+// ---------------------------------------------------------------------------
+// Preview
+// ---------------------------------------------------------------------------
 publishForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   showResult("");
@@ -153,6 +194,9 @@ editBtn.addEventListener("click", () => {
   showResult("");
 });
 
+// ---------------------------------------------------------------------------
+// Send
+// ---------------------------------------------------------------------------
 sendBtn.addEventListener("click", async () => {
   sendBtn.disabled = true;
   showResult("Sending media album to WhatsApp\u2026", "loading");
@@ -170,7 +214,8 @@ sendBtn.addEventListener("click", async () => {
 
     if (data.success) {
       showResult(
-        `Sent ${data.image_count} file${data.image_count === 1 ? "" : "s"} to WhatsApp (message ${data.message_id}).`,
+        `Sent ${data.image_count} file${data.image_count === 1 ? "" : "s"} to WhatsApp` +
+        ` (message ${data.message_id}${data.request_id ? ", req " + data.request_id : ""}).`,
         "success"
       );
       selectedFiles = [];
@@ -181,7 +226,9 @@ sendBtn.addEventListener("click", async () => {
       previewMeta.textContent = "";
     } else {
       showResult(
-        `WhatsApp delivery failed: ${data.error || "unknown error"}. The listing text above is unchanged \u2014 you can copy it manually or retry.`,
+        `WhatsApp delivery failed: ${data.error || "unknown error"}` +
+        `${data.request_id ? " [req " + data.request_id + "]" : ""}` +
+        ". The listing text above is unchanged \u2014 you can copy it manually or retry.",
         "error"
       );
     }

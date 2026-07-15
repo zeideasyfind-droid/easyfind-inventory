@@ -2,20 +2,63 @@
 
 POST /publish/preview - parse + enrich + format, return the caption only.
 POST /publish/send     - same pipeline, then deliver via WhatsApp Cloud API.
+GET  /publish/status  - configuration diagnostics: which env vars are present.
+                        Never exposes secret values -- only boolean 'present'
+                        per variable plus a masked preview of phone IDs.
 
 The frontend never talks to Google Maps or WhatsApp directly -- only these
-two endpoints, and all upstream credentials stay server-side.
+endpoints, and all upstream credentials stay server-side.
 """
 from typing import List
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from backend.models.publish import PublishPreviewResponse, PublishSendResponse
+from backend.config import settings
+from backend.models.publish import (
+    PublishPreviewResponse,
+    PublishSendResponse,
+    WhatsAppStatusResponse,
+    WhatsAppStatusVar,
+)
 from backend.services import community_service, formatter_service, maps_service, parser_service
 from backend.services.validation_service import ValidationError, validate_publish_request
-from backend.services.whatsapp_service import WhatsAppError, send_media_album
+from backend.services.whatsapp_service import GRAPH_BASE, WhatsAppError, send_media_album
+from backend.utils import generate_request_id, mask_phone
 
 router = APIRouter(prefix="/publish")
+
+
+@router.get("/status", response_model=WhatsAppStatusResponse)
+async def publish_status():
+    """Diagnostic endpoint: returns which WhatsApp env vars are configured.
+
+    Use this to confirm whether 'WhatsApp Cloud API is not configured.'
+    is caused by missing secrets before attempting a real send.
+    Token is NEVER returned -- only a boolean 'present' is exposed.
+    Phone number ID and recipient are masked (first 4 + last 2 chars).
+    """
+    token = settings.WHATSAPP_ACCESS_TOKEN
+    phone_id = settings.WHATSAPP_PHONE_NUMBER_ID
+    recipient = settings.WHATSAPP_RECIPIENT_NUMBER
+    maps_key = settings.GOOGLE_MAPS_API_KEY
+
+    return WhatsAppStatusResponse(
+        configured=bool(token and phone_id and recipient),
+        graph_base=GRAPH_BASE,
+        access_token=WhatsAppStatusVar(
+            present=bool(token),
+            masked_value=None,  # access token value is never exposed
+        ),
+        phone_number_id=WhatsAppStatusVar(
+            present=bool(phone_id),
+            masked_value=mask_phone(phone_id) if phone_id else None,
+        ),
+        recipient_number=WhatsAppStatusVar(
+            present=bool(recipient),
+            masked_value=mask_phone(recipient) if recipient else None,
+        ),
+        maps_api_key_present=bool(maps_key),
+    )
 
 
 async def _run_pipeline(owner_message: str, images: List[UploadFile]):
@@ -65,6 +108,8 @@ async def publish_send(
     owner_message: str = Form(""),
     images: List[UploadFile] = File(default_factory=list),
 ):
+    request_id = generate_request_id()
+
     try:
         parsed, community_info, listing = await _run_pipeline(owner_message, images)
     except ValidationError as exc:
@@ -87,6 +132,7 @@ async def publish_send(
             delivery="failed",
             preview=listing,
             error=str(exc),
+            request_id=request_id,
         )
 
     return PublishSendResponse(
@@ -94,4 +140,5 @@ async def publish_send(
         message_id=result.get("message_id"),
         image_count=result.get("image_count", len(media_payloads)),
         delivery="sent",
+        request_id=request_id,
     )

@@ -9,6 +9,28 @@ def generate_property_id() -> str:
     return "PID" + uuid.uuid4().hex[:8].upper()
 
 
+def generate_request_id() -> str:
+    """Short hex ID attached to /publish/send responses for log correlation."""
+    return uuid.uuid4().hex[:12].upper()
+
+
+def mask_phone(value: str) -> str:
+    """Mask a phone number or numeric ID for safe inclusion in diagnostic
+    responses -- shows first 4 and last 2 characters only, replaces the
+    middle with asterisks. Never logs or exposes the full value.
+
+    Examples:
+        '1234567890'  → '1234****90'
+        '12345'       → '1234*5'
+        'abc'         → '***'
+    """
+    if not value:
+        return ""
+    if len(value) <= 4:
+        return "*" * len(value)
+    return value[:4] + "*" * max(1, len(value) - 6) + value[-2:]
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -47,7 +69,7 @@ def detect_portal(url: str) -> str:
         return "Unknown"
     host = urlparse(url).netloc.lower()
     host = host.split("@")[-1]  # strip any userinfo
-    host = host.split(":")[0]  # strip any port
+    host = host.split(":")[0]   # strip any port
     for domain, name in _PORTAL_DOMAINS:
         if host == domain or host.endswith("." + domain):
             return name
