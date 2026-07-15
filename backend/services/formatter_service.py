@@ -13,6 +13,7 @@ Rules (non-negotiable):
   • Field order is fixed and must never change.
   • Sentence case for the title line only.
   • Any field that was not parsed is simply omitted — never a placeholder.
+  • Never output Unknown, N/A, None, or any placeholder string.
 
 Canonical output format:
 
@@ -50,20 +51,30 @@ def _preserve_amount(raw: str | None, numeric: float | None) -> str | None:
     compact numeric representation only when no text was captured.
 
     Examples:
-      raw="87k"    → "87k"
-      raw="2.5L"   → "2.5L"
+      raw="87k"       → "87k"
+      raw="2.5L"      → "2.5L"
       raw="Water bill" → "Water bill"
-      raw=None, numeric=87000 → "87k"
-      raw=None, numeric=250000 → "2.5L"
+      raw=None, numeric=87000   → "87k"
+      raw=None, numeric=250000  → "2.5L"
     """
-    if raw and raw.strip():
-        return raw.strip()
-    if numeric is None:
+    # Never treat a boolean (maintenance_applicable) as a raw amount
+    if isinstance(raw, bool):
+        raw = None
+    if raw and str(raw).strip():
+        # Sanity-check: reject if it's a nullish string
+        cleaned = str(raw).strip()
+        low = cleaned.lower()
+        if low not in ("none", "null", "n/a", "na", "nil", "-"):
+            return cleaned
+
+    if numeric is None or isinstance(numeric, bool):
         return None
     n = float(numeric)
+    if n == 0:
+        return "Included"
     if n >= 100_000:
-        l = n / 100_000
-        return f"{int(l)}L" if l == int(l) else f"{l:.1f}L"
+        lakh = n / 100_000
+        return f"{int(lakh)}L" if lakh == int(lakh) else f"{lakh:.1f}L"
     if n >= 1_000:
         k = n / 1_000
         return f"{int(k)}k" if k == int(k) else f"{k:.1f}k"
@@ -80,7 +91,6 @@ def _build_title(parsed: dict) -> str:
 
     furnishing = (parsed.get("furnishing") or "").strip()
     if furnishing:
-        # Normalise common variants to title words, then sentence-case the whole.
         low = furnishing.lower()
         if "fully" in low:
             parts.append("Fully furnished")
@@ -93,7 +103,7 @@ def _build_title(parsed: dict) -> str:
 
     bhk = (parsed.get("bhk_label") or parsed.get("bhk") or "").strip()
     if bhk:
-        parts.append(bhk)
+        parts.append(str(bhk))
 
     bath = parsed.get("bathrooms")
     if bath is not None:
@@ -108,8 +118,7 @@ def _build_title(parsed: dict) -> str:
         try:
             bal = int(balcony)
             if bal > 0:
-                bal_str = f"{bal} {'balcony' if bal == 1 else 'balcony'}"
-                # Append to the "with N bathroom(s)" phrase if present
+                bal_str = f"{bal} balcony"
                 if parts and parts[-1].startswith("with "):
                     parts[-1] += f", {bal_str}"
                 else:
@@ -120,17 +129,25 @@ def _build_title(parsed: dict) -> str:
     return " ".join(parts)
 
 
-def _community_label(community_info: dict) -> str:
-    """Map internal community classification to EasyFind display label."""
+def _community_label(community_info: dict) -> str | None:
+    """Map internal community classification to EasyFind display label.
+    Returns None when community is unknown/empty (field should be omitted).
+    """
     raw = (community_info.get("community") or "").strip()
+    if not raw:
+        return None
     low = raw.lower()
-    if "semi" in low:
-        return "Semi Gated"
-    if "stand" in low or "alone" in low:
-        return "Standalone"
-    if "gated" in low or raw == "Gated":
+    if low in ("gated community", "gated"):
         return "Gated Community"
-    return raw if raw else "Gated Community"
+    if low in ("semi gated", "semi-gated", "semi_gated"):
+        return "Semi Gated"
+    if low in ("standalone", "stand-alone", "independent"):
+        return "Standalone"
+    # Unknown, null-ish, or any unexpected value → omit
+    if low in ("unknown", "none", "null", "n/a", "na", ""):
+        return None
+    # Pass through any other non-empty value as-is
+    return raw
 
 
 def _name_label_and_value(community_info: dict) -> tuple[str, str | None]:
@@ -140,14 +157,14 @@ def _name_label_and_value(community_info: dict) -> tuple[str, str | None]:
     Semi Gated       → label="Apartment", value=society/building name
     Standalone       → label="Landmark",  value=landmark name
     """
-    community = (community_info.get("community") or "").lower()
-    society  = community_info.get("society")
-    landmark = community_info.get("landmark")
+    community = (community_info.get("community") or "").strip().lower()
+    society   = (community_info.get("society") or "").strip() or None
+    landmark  = (community_info.get("landmark") or "").strip() or None
 
-    if "semi" in community:
-        return "Apartment", society or landmark
-    if "stand" in community or "alone" in community:
+    if community in ("standalone", "stand-alone", "independent"):
         return "Landmark", landmark or society
+    if community in ("semi gated", "semi-gated", "semi_gated"):
+        return "Apartment", society or landmark
     # Default: Gated Community
     return "Society", society or landmark
 
@@ -160,15 +177,16 @@ def build_listing(parsed: dict, community_info: dict, maps_url: str | None) -> s
     Parameters
     ----------
     parsed : dict
-        Output of parser_service / normalizer.  Keys consulted:
+        Output of parser_service.  Keys consulted:
           furnishing, bhk_label, bhk, bathrooms, balcony,
           rent_raw, rent, maintenance_raw, maintenance,
-          deposit_raw, deposit, area_label, floor,
+          deposit_raw, deposit,
+          area (numeric), floor,
           available_from, tenant_type, pets_allowed,
           location.
     community_info : dict
         Output of community_service.classify_community().
-        Keys: community, society, landmark.
+        Keys: community, society, landmark, location.
     maps_url : str | None
         Resolved Google Maps link (already shortened or full).
     """
@@ -187,8 +205,16 @@ def build_listing(parsed: dict, community_info: dict, maps_url: str | None) -> s
     if rent:
         lines.append(f"Rent: {rent}")
 
-    # Maintenance
-    maint = _preserve_amount(parsed.get("maintenance_raw"), parsed.get("maintenance"))
+    # Maintenance — only emit when a real value exists (not a boolean flag)
+    maint_raw     = parsed.get("maintenance_raw")
+    maint_numeric = parsed.get("maintenance")
+    # If maintenance_raw is a non-boolean string, use it directly.
+    # If it's None but we have a numeric, format it.
+    # Never emit when only maintenance_applicable (bool) is set.
+    maint = _preserve_amount(
+        maint_raw if not isinstance(maint_raw, bool) else None,
+        maint_numeric if not isinstance(maint_numeric, bool) else None,
+    )
     if maint:
         lines.append(f"Maintenance: {maint}")
 
@@ -197,40 +223,63 @@ def build_listing(parsed: dict, community_info: dict, maps_url: str | None) -> s
     if deposit:
         lines.append(f"Deposit: {deposit}")
 
-    # Sq.ft
-    area = (parsed.get("area_label") or parsed.get("area") or "").strip()
-    if area:
-        lines.append(f"Sq.ft: {area}")
+    # Sq.ft — use raw numeric value (not area_label which appends "Sq. Ft.")
+    area_raw = parsed.get("area")
+    if area_raw is not None:
+        try:
+            area_num = float(area_raw)
+            # Format as integer if whole number, else one decimal
+            area_str = str(int(area_num)) if area_num == int(area_num) else f"{area_num:.1f}"
+            lines.append(f"Sq.ft: {area_str}")
+        except (TypeError, ValueError):
+            pass
 
-    # Floor
+    # Floor — raw owner text preserved
     floor = (parsed.get("floor") or "").strip()
     if floor:
         lines.append(f"Floor: {floor}")
 
-    # Available From — preserve owner text (e.g. "October 1", "Immediate")
+    # Available From — preserve owner text ("October 1", "Immediate", etc.)
     avail = (parsed.get("available_from") or "").strip()
     if avail:
         lines.append(f"Available From: {avail}")
 
-    # Preferred Tenant
-    tenant = (parsed.get("tenant_type") or "").strip().rstrip(" Only").strip()
+    # Preferred Tenant — check both key names (parser uses tenant_type,
+    # normalizer uses tenant_preference)
+    tenant = (
+        parsed.get("tenant_type")
+        or parsed.get("tenant_preference")
+        or ""
+    ).strip().rstrip(" Only").strip()
     if tenant:
         lines.append(f"Preferred Tenant: {tenant}")
 
-    # Pets
-    pets_raw = (parsed.get("pets_allowed") or "").strip().lower()
-    if pets_raw in ("yes", "allowed", "true", "1"):
-        lines.append("Pets: Allowed")
-    elif pets_raw in ("no", "not allowed", "false", "0"):
-        lines.append("Pets: Not Allowed")
-    elif pets_raw:
-        lines.append(f"Pets: {parsed['pets_allowed'].strip()}")
+    # Pets — check both key names
+    pets_raw = (
+        parsed.get("pets_allowed")
+        or parsed.get("pets")
+        or ""
+    ).strip()
+    if pets_raw:
+        low_pets = pets_raw.lower()
+        if low_pets in ("yes", "allowed", "true", "1", "allowed"):
+            lines.append("Pets: Allowed")
+        elif low_pets in ("no", "not allowed", "false", "0", "not allowed"):
+            lines.append("Pets: Not Allowed")
+        else:
+            lines.append(f"Pets: {pets_raw}")
 
-    # Community
-    lines.append(f"Community: {_community_label(ci)}")
+    # Community — omit entirely when unknown/empty
+    community_display = _community_label(ci)
+    if community_display:
+        lines.append(f"Community: {community_display}")
 
-    # Location  (WhatsApp bold)
-    location = (parsed.get("location") or "").strip()
+    # Location — prefer parsed location from owner message,
+    # fall back to locality extracted from Maps address_components
+    location = (
+        (parsed.get("location") or "").strip()
+        or (ci.get("location") or "").strip()
+    )
     if location:
         lines.append(f"Location: *{location}*")
 
