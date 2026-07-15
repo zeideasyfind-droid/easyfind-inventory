@@ -21,8 +21,6 @@ let selectedFiles = [];
 
 // ---------------------------------------------------------------------------
 // Configuration status banner — fetched once on page load.
-// Tells the operator immediately whether WhatsApp secrets are in place so
-// 'WhatsApp Cloud API is not configured.' is never a surprise at send time.
 // ---------------------------------------------------------------------------
 async function loadWhatsAppStatus() {
   if (!statusBanner) return;
@@ -91,7 +89,6 @@ function renderMediaPreview() {
 }
 
 function addFiles(fileList) {
-  // Preserve original order (11_WHATSAPP_DELIVERY_ENGINE.md).
   Array.from(fileList).forEach((file) => selectedFiles.push(file));
   renderImageList();
 }
@@ -145,6 +142,28 @@ function buildFormData() {
 }
 
 // ---------------------------------------------------------------------------
+// [DEBUG] Build a human-readable error string from a failed response.
+// Shows the complete backend payload so the real exception is never hidden.
+// REMOVE THIS BLOCK after root cause is confirmed.
+// ---------------------------------------------------------------------------
+async function debugErrorMessage(response) {
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+  try {
+    if (contentType.includes("application/json")) {
+      const body = await response.clone().json();
+      // FastAPI validation errors arrive as { detail: [...] } — unwrap fully.
+      const raw = JSON.stringify(body, null, 2);
+      return `[DEBUG] HTTP ${response.status} — full backend response:\n${raw}`;
+    }
+    // text/plain, text/html, or anything else
+    const text = await response.clone().text();
+    return `[DEBUG] HTTP ${response.status} — backend response (first 1000 chars):\n${text.slice(0, 1000)}`;
+  } catch (_) {
+    return `[DEBUG] HTTP ${response.status} — could not read response body.`;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Preview
 // ---------------------------------------------------------------------------
 publishForm.addEventListener("submit", async (event) => {
@@ -169,11 +188,14 @@ publishForm.addEventListener("submit", async (event) => {
       method: "POST",
       body: buildFormData(),
     });
-    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new Error(data.detail || "Could not generate a preview for this listing.");
+      // [DEBUG] Show the complete backend error — not a generic fallback.
+      const errMsg = await debugErrorMessage(response);
+      throw new Error(errMsg);
     }
+
+    const data = await response.json();
 
     previewText.textContent = data.preview;
     const locationLabel = data.society || data.landmark || "not identified";

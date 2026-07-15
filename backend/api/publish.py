@@ -9,6 +9,8 @@ GET  /publish/status  - configuration diagnostics: which env vars are present.
 The frontend never talks to Google Maps or WhatsApp directly -- only these
 endpoints, and all upstream credentials stay server-side.
 """
+import traceback
+import logging
 from typing import List
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -29,6 +31,8 @@ from backend.services.whatsapp_service import (
     send_media_album,
 )
 from backend.utils import generate_request_id, mask_phone
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/publish")
 
@@ -89,10 +93,34 @@ async def publish_preview(
     owner_message: str = Form(""),
     images: List[UploadFile] = File(default_factory=list),
 ):
+    # [DEBUG] Log all unhandled exceptions with full traceback and input summary.
+    # REMOVE THIS BLOCK after root cause is confirmed.
     try:
         parsed, community_info, listing = await _run_pipeline(owner_message, images)
     except ValidationError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception as exc:
+        maps_url_detected = None
+        try:
+            maps_url_detected = parser_service.detect_maps_url(owner_message or "")
+        except Exception:
+            pass
+        logger.error(
+            "[DEBUG] publish_preview UNHANDLED EXCEPTION\n"
+            "  Exception type : %s\n"
+            "  Exception msg  : %s\n"
+            "  owner_message  : %d chars\n"
+            "  image_count    : %d\n"
+            "  maps_url       : %s\n"
+            "  --- traceback ---\n%s",
+            type(exc).__name__,
+            str(exc),
+            len(owner_message or ""),
+            len(images or []),
+            maps_url_detected or "(none detected)",
+            traceback.format_exc(),
+        )
+        raise  # re-raise — nothing swallowed
 
     return PublishPreviewResponse(
         success=True,
@@ -128,8 +156,6 @@ async def publish_send(
     try:
         result = await send_media_album(media_payloads, listing, request_id=request_id)
     except PhoneNumberMismatchError as exc:
-        # Mismatch is a configuration error, not a transient failure.
-        # Return the formatted caption so it is not lost.
         return PublishSendResponse(
             success=False,
             image_count=len(media_payloads),
