@@ -16,12 +16,13 @@ Place type → community mapping
 -------------------------------
 Gated Community  → types contain any of:
     residential_complex, housing_complex, gated_community,
-    real_estate_agency  (when name has gated keywords)
+    neighborhood
+    OR name contains any _GATED_NAME_KEYWORDS
 Semi Gated       → types contain any of:
     premise, subpremise, apartment_complex, apartment_building,
-    establishment  (when name looks like a standalone building)
-Standalone       → raw pin / no named place found / types match
-    point_of_interest only
+    establishment  (when name has no gated keywords)
+    OR name contains any _SEMI_GATED_NAME_KEYWORDS
+Standalone       → raw pin / no named place found (source == 'nearby')
 
 Failure handling
 ----------------
@@ -41,7 +42,7 @@ from backend.config import settings
 
 # ── Google Places API endpoints ──────────────────────────────────────────────────
 
-FIND_PLACE_URL   = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
+FIND_PLACE_URL    = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
 PLACE_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 NEARBY_SEARCH_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 
@@ -65,12 +66,41 @@ _BUILDING_TYPES = {
     "lodging",
 }
 
-# Name keywords that override building classification → Gated Community.
+# Name keywords that strongly indicate a large gated society / villa community.
+# Mirrors community_service._GATED_KEYWORDS exactly.
 _GATED_NAME_KEYWORDS = (
-    "township", "layout", "enclave", "county",
-    "meadows", "gardens", "habitat", "city", "nagar",
-    "phase", "greens", "woods", "palm", "royale",
-    "elite", "eco ", "society", "residences",
+    "township",
+    "layout",
+    "enclave",
+    "county",
+    "meadows",
+    "gardens",
+    "habitat",
+    "city",
+    "nagar",
+    "phase",
+    "greens",
+    "woods",
+    "palm",
+    "royale",
+    "elite",
+    "eco ",
+    "society",
+    "residences",
+    "grove",
+    "villas",
+    "heights",   # large villa complexes, not standalone
+    "park",
+)
+
+# Name keywords that indicate a smaller apartment building (Semi Gated).
+# Mirrors community_service._SEMI_GATED_KEYWORDS exactly.
+_SEMI_GATED_NAME_KEYWORDS = (
+    "apartment",
+    "residency",
+    "towers",
+    "block",
+    "building",
 )
 
 # ── URL helpers ───────────────────────────────────────────────────────────────────
@@ -228,44 +258,52 @@ async def _nearest_landmark(
     }
 
 
-# ── Classification (local, mirrors community_service logic) ────────────────────
+# ── Classification (authoritative — community_service defers to this) ──────────
 
 def _classify_place(place: dict) -> str:
     """Return 'Gated Community', 'Semi Gated', or 'Standalone'.
 
     Priority:
-      1. Google types (authoritative).
-      2. Name keyword heuristics.
-      3. Source fallback.
+      1. source == 'nearby'  → always Standalone (bare pin, no named place).
+      2. Google types (authoritative).
+      3. Name keyword heuristics — full pass before any fallback.
+      4. Named place with no matching keywords → Semi Gated (never Standalone).
+
+    IMPORTANT: A place returned by FindPlace / Place Details is NEVER
+    classified Standalone, even when Google types are generic.  Standalone
+    means no named place was found at all (nearby fallback only).
     """
+    # Rule 1: nearby source is the only legitimate Standalone path.
     if place.get("source") == "nearby":
         return "Standalone"
 
     types = set(place.get("types") or [])
     name  = (place.get("name") or "").lower()
 
-    # Hard Gated signals from Google
+    # Rule 2a: Hard Gated signals from Google types.
     if types & _GATED_TYPES:
         return "Gated Community"
 
-    # Building type + name keyword → could be either
+    # Rule 2b: Building types — run keyword check to distinguish Gated vs Semi.
     if types & _BUILDING_TYPES:
         if any(kw in name for kw in _GATED_NAME_KEYWORDS):
             return "Gated Community"
         return "Semi Gated"
 
-    # Name-only keyword heuristic when Google types are generic
-    if any(kw in name for kw in _GATED_NAME_KEYWORDS):
-        return "Gated Community"
-    if any(kw in name for kw in ("apartment", "residency", "heights", "towers", "block")):
+    # Rule 3: Generic types (point_of_interest, establishment, etc.) but
+    # Google returned a real named place.  Run full keyword heuristics —
+    # never skip to Standalone just because Google types are unhelpful.
+    if name:
+        if any(kw in name for kw in _GATED_NAME_KEYWORDS):
+            return "Gated Community"
+        if any(kw in name for kw in _SEMI_GATED_NAME_KEYWORDS):
+            return "Semi Gated"
+        # Named place, no keyword match → Semi Gated (not Standalone).
         return "Semi Gated"
 
-    # If Google returned a named place but types are unhelpful,
-    # default to Semi Gated (never Standalone from a named place).
-    if place.get("name"):
-        return "Semi Gated"
-
-    return "Standalone"
+    # Rule 4: No name, no useful types — should not reach here via normal
+    # flow (nearby fallback handles the no-name case), but be safe.
+    return "Semi Gated"
 
 
 # ── Public API ───────────────────────────────────────────────────────────────────
@@ -289,11 +327,10 @@ async def enrich_from_maps_url(
 
     Classification guarantees
     -------------------------
-    • community=Standalone is ONLY set when Google’s source is 'nearby'
-      (bare pin, no named place at all) or when types contain exclusively
-      point_of_interest-level signals.
+    • community=Standalone is ONLY set when source is 'nearby'
+      (bare pin, no named place at all).
     • A named place returned by FindPlace / Place Details is NEVER
-      classified Standalone merely because the parser had no text hint.
+      classified Standalone regardless of how generic its Google types are.
     """
     api_key = settings.GOOGLE_MAPS_API_KEY
     if not api_key or not maps_url:
